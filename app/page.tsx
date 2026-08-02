@@ -25,24 +25,9 @@ const journeySteps = [
 
 const features = [
   {
-    icon: "✨",
-    title: "AI 자동 생성",
-    desc: "단어를 입력하면 AI가 즉시 뜻, 발음기호, 예문, 유의어, 반의어까지 찾아드려요.",
-  },
-  {
-    icon: "🃏",
-    title: "Leitner 플래시카드",
-    desc: "5단계 박스 시스템으로 모르는 단어는 자주, 아는 단어는 간격을 두고 복습해요.",
-  },
-  {
-    icon: "🌍",
-    title: "10개 언어 지원",
-    desc: "한국어, 영어, 일본어, 중국어, 독일어, 프랑스어, 스페인어 등 다양한 언어로 학습하세요.",
-  },
-  {
     icon: "🔔",
     title: "복습 알람",
-    desc: "원하는 시간에 복습 알림을 받아 학습 습관을 유지하세요.",
+    desc: "원하는 시간에, 원하는 범위(언어/카테고리/모드)로 복습 알림을 받아보세요.",
   },
   {
     icon: "⚡",
@@ -53,6 +38,11 @@ const features = [
     icon: "📊",
     title: "엑셀 내보내기",
     desc: "저장한 단어장을 .xlsx 파일로 내보내 원하는 방식으로 활용하세요.",
+  },
+  {
+    icon: "🌙",
+    title: "다크 모드",
+    desc: "라이트/다크/시스템 테마를 지원해요.",
   },
 ];
 
@@ -110,9 +100,9 @@ export default function Home() {
       {/* Features */}
       <section className="px-6 pb-24 max-w-4xl mx-auto">
         <h2 className="text-2xl font-bold text-center mb-12 text-zinc-800 dark:text-zinc-200">
-          주요 기능
+          더 편리하게
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           {features.map((f) => (
             <div
               key={f.title}
