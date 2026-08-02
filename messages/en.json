@@ -79,40 +79,69 @@
   },
   "Privacy": {
     "title": "Privacy Policy",
-    "lastUpdated": "Last updated: June 2025",
+    "lastUpdated": "Last updated: August 2026",
+    "intro": "Word Bank (the \"App\") values your privacy. This policy explains what information the App collects, how it is used, and how it is protected.",
     "sections": {
       "collect": {
         "heading": "Information We Collect",
-        "intro": "The Word Bank app collects the following information:",
+        "highlight": "Word Bank does not collect personally identifiable information. No sign-up, email, or name is required to use the app.",
+        "intro": "Data the app processes:",
         "items": [
-          "Word data you enter directly (stored in Firebase Firestore)",
-          "App error and performance data (collected anonymously via Sentry)",
-          "Advertising identifier for ad services (Google AdMob)"
+          "Learning progress data — Review progress, Leitner box state, notification settings, and other learning data are stored only in local storage on your device.",
+          "App settings — Language, theme, notification time, and other settings are stored only on your device.",
+          "Anonymous user identifier — The app uses Google Firebase Anonymous Authentication. A randomly generated anonymous ID is issued without sign-up and is not linked to a specific individual.",
+          "Word search queries — When you look up a meaning or example, your search term is passed through the app's own server (Firebase Cloud Functions) to the Google Gemini API for processing. No user identifier is included, and the request is handled anonymously.",
+          "AI-generated word data — AI-generated meanings, examples, phonetics (IPA), synonyms, and antonyms are cached in Google Firebase. This is a shared cache used to speed up repeat lookups of the same word, and it is de-identified data not linked to any specific user.",
+          "Word correction feedback — If you report or request a correction to a word's content (meaning, examples, synonyms, etc.), the word and your feedback are stored in Google Firebase. Stored feedback may be periodically aggregated and used for AI analysis to improve service quality. It does not include your name, email, or other personally identifying information.",
+          "Error reports — When the app crashes or encounters an error, device information (OS version, app version, where the error occurred) is sent to Sentry's servers. Depending on the error, the word or sentence text you were entering at the time may also be included."
         ]
       },
-      "purpose": {
-        "heading": "Purpose of Use",
+      "permissions": {
+        "heading": "App Permissions",
+        "intro": "The app uses the following permissions. It does not use sensitive permissions such as camera, location, contacts, or microphone.",
         "items": [
-          "Vocabulary sync and service delivery",
-          "Improving app stability",
-          "Displaying ads to support the free service"
+          "INTERNET — Looking up word meanings and displaying ads",
+          "POST_NOTIFICATIONS — Showing review reminders",
+          "RECEIVE_BOOT_COMPLETED — Restoring notification schedules after a device restart",
+          "VIBRATE — Notification vibration"
         ]
       },
       "thirdParty": {
         "heading": "Third-Party Services",
-        "items": [
-          "Google Firebase (data storage and authentication)",
-          "Google AdMob (advertising)",
-          "Sentry (error reporting)"
-        ]
+        "intro": "The app uses the following third-party services, each governed by its own privacy policy.",
+        "tableHeaders": {
+          "service": "Service",
+          "purpose": "Purpose",
+          "policy": "Privacy Policy"
+        },
+        "services": [
+          { "name": "Google Gemini API", "purpose": "Generating word meanings and examples (relayed through our own server)" },
+          { "name": "Google Firebase", "purpose": "Anonymous authentication, word cache storage, correction feedback storage" },
+          { "name": "Google AdMob", "purpose": "Banner and rewarded ads (non-personalized)" },
+          { "name": "Sentry", "purpose": "App error collection and stability improvement" }
+        ],
+        "viewLink": "View"
+      },
+      "ads": {
+        "heading": "Advertising",
+        "body": "The app displays banner and rewarded ads through Google AdMob. Ads are served as non-personalized only. AdMob may use an advertising identifier to serve ads.",
+        "androidNote": "Android: Settings → Google → Ads → Delete advertising ID or opt out of ad personalization"
+      },
+      "children": {
+        "heading": "Children's Privacy",
+        "body": "The app is not directed at children under 13, and we do not knowingly collect personal information from children. If you believe a child under 13 is using the app, please contact us immediately at the email below."
       },
       "retention": {
         "heading": "Data Retention and Deletion",
-        "body": "Your data is deleted when you delete the app or your account. You can request account deletion from the settings screen."
+        "body": "Local data on your device is deleted when you delete the app. Cached data stored in Firebase is de-identified and is not linked to any specific user."
+      },
+      "changes": {
+        "heading": "Changes to This Policy",
+        "body": "This privacy policy may change over time. Any changes will be reflected by updating the \"Last updated\" date on this page."
       },
       "contact": {
         "heading": "Contact",
-        "prefix": "For privacy-related inquiries:"
+        "prefix": "If you have any questions about how your information is handled, please contact us at:"
       }
     },
     "backHome": "← Back home"
