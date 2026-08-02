@@ -445,9 +445,10 @@ export default async function LocaleLayout({ children, params }: Props) {
 
 - [ ] **Step 2: Create `app/[locale]/page.tsx`**
 
+> **Note (post-implementation correction):** the snippet below originally used the synchronous `useTranslations` hook. That throws ("`useTranslations` is not callable within an async component") with the installed `next-intl@4.13.4` — `useTranslations` is for *synchronous* components; async Server Components must use the awaited `getTranslations` from `next-intl/server` instead, per next-intl's own docs. The snippet has been corrected below to match what was actually built and reviewed.
+
 ```tsx
-import { setRequestLocale } from "next-intl/server";
-import { useTranslations } from "next-intl";
+import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.taejinahn.wordbank";
@@ -492,7 +493,7 @@ type Props = { params: Promise<{ locale: string }> };
 export default async function Home({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const t = useTranslations("Home");
+  const t = await getTranslations({ locale, namespace: "Home" });
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
@@ -602,9 +603,10 @@ export default async function Home({ params }: Props) {
 
 - [ ] **Step 3: Create `app/[locale]/privacy/page.tsx`**
 
+> **Note (post-implementation correction):** same `useTranslations` → `getTranslations` correction as `app/[locale]/page.tsx` above.
+
 ```tsx
-import { setRequestLocale } from "next-intl/server";
-import { useTranslations } from "next-intl";
+import { setRequestLocale, getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 
 type Props = { params: Promise<{ locale: string }> };
@@ -612,7 +614,7 @@ type Props = { params: Promise<{ locale: string }> };
 export default async function PrivacyPolicy({ params }: Props) {
   const { locale } = await params;
   setRequestLocale(locale);
-  const t = useTranslations("Privacy");
+  const t = await getTranslations({ locale, namespace: "Privacy" });
 
   const collectItems = t.raw("sections.collect.items") as string[];
   const purposeItems = t.raw("sections.purpose.items") as string[];
@@ -765,23 +767,21 @@ git commit -m "feat: 랜딩페이지/개인정보처리방침을 app/[locale] �
 - Consumes: `routing` from `i18n/routing.ts`, `Link`/`usePathname` from `i18n/navigation.ts` (Task 1).
 - Produces: `LocaleSwitcher` default-exported component, no props — consumed by both page files in this task.
 
+> **Note (post-implementation correction):** the snippet below originally hardcoded `localeLabels` in this component, which contradicted this plan's own extensibility constraint ("adding a locale only requires `i18n/routing.ts` + a new `messages/<locale>.json`"). The final whole-branch review caught this self-contradiction; the fix (approved by the user) moved the labels into a `LocaleSwitcher` namespace in `messages/ko.json`/`messages/en.json`, read via the client-safe `useTranslations` hook. Snippet corrected below.
+
 - [ ] **Step 1: Create `components/LocaleSwitcher.tsx`**
 
 ```tsx
 "use client";
 
-import { useLocale } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 import { routing } from "@/i18n/routing";
-
-const localeLabels: Record<(typeof routing.locales)[number], string> = {
-  ko: "한국어",
-  en: "English",
-};
 
 export default function LocaleSwitcher() {
   const locale = useLocale();
   const pathname = usePathname();
+  const t = useTranslations("LocaleSwitcher");
 
   return (
     <nav className="flex items-center gap-2 text-sm">
@@ -790,7 +790,7 @@ export default function LocaleSwitcher() {
           {i > 0 && <span className="text-zinc-300 dark:text-zinc-700">/</span>}
           {loc === locale ? (
             <span className="text-zinc-900 dark:text-zinc-100 font-medium">
-              {localeLabels[loc]}
+              {t(loc)}
             </span>
           ) : (
             <Link
@@ -798,13 +798,22 @@ export default function LocaleSwitcher() {
               locale={loc}
               className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
             >
-              {localeLabels[loc]}
+              {t(loc)}
             </Link>
           )}
         </span>
       ))}
     </nav>
   );
+}
+```
+
+This requires a `LocaleSwitcher` namespace in both `messages/ko.json` and `messages/en.json` (identical in both files — each language names itself the same way regardless of the current locale):
+
+```json
+"LocaleSwitcher": {
+  "ko": "한국어",
+  "en": "English"
 }
 ```
 
