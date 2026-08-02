@@ -1,5 +1,28 @@
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.taejinahn.wordbank";
 
+const journeySteps = [
+  {
+    icon: "📖",
+    title: "읽으면서 단어를 만나요",
+    desc: "10개 언어, 6단계 레벨의 AI 생성 이야기로 읽기 연습을 해보세요. 모르는 단어가 나오면 탭 한 번으로 바로 뜻을 확인할 수 있어요.",
+  },
+  {
+    icon: "✨",
+    title: "탭 한 번으로 저장, AI가 나머지를 채워요",
+    desc: "읽다가 발견했든 직접 입력했든, 저장하기만 하세요. AI가 즉시 품사·뜻·발음기호·예문·유의어·반의어까지 찾아드려요.",
+  },
+  {
+    icon: "🗂️",
+    title: "나만의 방식으로 정리해요",
+    desc: "언어별, 혹은 직접 만든 카테고리별로 단어장을 정리하세요. 색상을 지정하고 검색하고, 필요하면 엑셀로 내보낼 수 있어요.",
+  },
+  {
+    icon: "🃏",
+    title: "잊을 만할 때 복습해요",
+    desc: "Leitner 5단계 박스로 아는 단어는 간격을 두고, 모르는 단어는 자주 복습해요. 카드 뒤집기·빈칸 채우기·듣고 맞추기 세 모드 중 골라보세요.",
+  },
+];
+
 const features = [
   {
     icon: "✨",
@@ -62,6 +85,26 @@ export default function Home() {
         <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-3">
           iOS 버전은 준비 중입니다.
         </p>
+      </section>
+
+      {/* Journey */}
+      <section className="px-6 pb-24 max-w-3xl mx-auto">
+        <div className="flex flex-col gap-16">
+          {journeySteps.map((step, i) => (
+            <div
+              key={step.title}
+              className={`flex flex-col sm:flex-row items-center gap-6 text-center sm:text-left ${
+                i % 2 === 1 ? "sm:flex-row-reverse sm:text-right" : ""
+              }`}
+            >
+              <div className="text-6xl shrink-0">{step.icon}</div>
+              <div>
+                <h3 className="text-xl font-bold mb-2">{step.title}</h3>
+                <p className="text-zinc-500 dark:text-zinc-400 leading-relaxed">{step.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       {/* Features */}
