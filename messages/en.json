@@ -1,0 +1,116 @@
+{
+  "Metadata": {
+    "title": "Word Bank — AI Vocabulary & Reading",
+    "description": "AI instantly fills in word meanings and example sentences, and reading content plus Leitner review help you master them completely. Supports 14 languages.",
+    "ogDescription": "AI instantly fills in word meanings and example sentences, and reading content plus Leitner review help you master them completely."
+  },
+  "Home": {
+    "hero": {
+      "tagline": "Save your curiosity.",
+      "subtitleLine1": "Found a word you don't know? Just save it.",
+      "subtitleLine2": "AI instantly finds the meaning, examples, and synonyms for you.",
+      "iosNote": "iOS version is coming soon."
+    },
+    "downloadLabel": "Get it on Google Play",
+    "journey": {
+      "read": {
+        "title": "Meet words as you read",
+        "desc": "Practice reading with AI-generated stories in 10 languages across 6 levels. Tap any unfamiliar word to see its meaning instantly."
+      },
+      "save": {
+        "title": "Save with one tap, AI fills in the rest",
+        "desc": "Whether you found it while reading or typed it yourself, just save it. AI instantly finds the part of speech, meaning, pronunciation, example sentences, synonyms, and antonyms."
+      },
+      "organize": {
+        "title": "Organize it your way",
+        "desc": "Organize your vocabulary by language or by categories you create. Assign colors, search freely, and export to Excel whenever you need."
+      },
+      "review": {
+        "title": "Review right before you forget",
+        "desc": "The 5-box Leitner system spaces out words you know and reviews unfamiliar ones more often. Choose from three modes: flip cards, fill in the blank, or listen and answer."
+      }
+    },
+    "featuresHeading": "More convenience",
+    "features": {
+      "reminder": {
+        "title": "Review reminders",
+        "desc": "Get review reminders at the time you want, scoped to the language, category, or mode you choose."
+      },
+      "quickAdd": {
+        "title": "Quick add from notifications",
+        "desc": "Found a word in another app? Add it right from the notification shade."
+      },
+      "export": {
+        "title": "Excel export",
+        "desc": "Export your saved vocabulary to an .xlsx file and use it however you like."
+      },
+      "darkMode": {
+        "title": "Dark mode",
+        "desc": "Supports light, dark, and system themes."
+      }
+    },
+    "languagesHeading": "14 languages supported",
+    "languagesSubtitle": "Learn in the language you want.",
+    "languages": {
+      "ko": "Korean",
+      "en": "English",
+      "ja": "Japanese",
+      "zh": "Chinese",
+      "de": "German",
+      "fr": "French",
+      "es": "Spanish",
+      "pt": "Portuguese",
+      "ar": "Arabic",
+      "la": "Latin",
+      "hi": "Hindi",
+      "bn": "Bengali",
+      "ru": "Russian",
+      "id": "Indonesian"
+    },
+    "ctaHeading": "Get started now",
+    "footer": {
+      "copyright": "© 2026 Talaria. All rights reserved.",
+      "privacyLink": "Privacy Policy"
+    }
+  },
+  "Privacy": {
+    "title": "Privacy Policy",
+    "lastUpdated": "Last updated: June 2025",
+    "sections": {
+      "collect": {
+        "heading": "Information We Collect",
+        "intro": "The Word Bank app collects the following information:",
+        "items": [
+          "Word data you enter directly (stored in Firebase Firestore)",
+          "App error and performance data (collected anonymously via Sentry)",
+          "Advertising identifier for ad services (Google AdMob)"
+        ]
+      },
+      "purpose": {
+        "heading": "Purpose of Use",
+        "items": [
+          "Vocabulary sync and service delivery",
+          "Improving app stability",
+          "Displaying ads to support the free service"
+        ]
+      },
+      "thirdParty": {
+        "heading": "Third-Party Services",
+        "items": [
+          "Google Firebase (data storage and authentication)",
+          "Google AdMob (advertising)",
+          "Sentry (error reporting)"
+        ]
+      },
+      "retention": {
+        "heading": "Data Retention and Deletion",
+        "body": "Your data is deleted when you delete the app or your account. You can request account deletion from the settings screen."
+      },
+      "contact": {
+        "heading": "Contact",
+        "prefix": "For privacy-related inquiries:"
+      }
+    },
+    "backHome": "← Back home"
+  }
+}
