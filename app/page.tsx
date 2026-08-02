@@ -100,7 +100,7 @@ export default function Home() {
             >
               <div className="text-6xl shrink-0">{step.icon}</div>
               <div>
-                <h3 className="text-xl font-bold mb-2">{step.title}</h3>
+                <h2 className="text-xl font-bold mb-2">{step.title}</h2>
                 <p className="text-zinc-500 dark:text-zinc-400 leading-relaxed">{step.desc}</p>
               </div>
             </div>
