@@ -59,6 +59,9 @@ export default function Home() {
           </svg>
           Google Play에서 다운로드
         </a>
+        <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-3">
+          iOS 버전은 준비 중입니다.
+        </p>
       </section>
 
       {/* Features */}
@@ -82,7 +85,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="border-t border-zinc-100 dark:border-zinc-800 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
-        <p className="mb-2">© 2025 Talaria. All rights reserved.</p>
+        <p className="mb-2">© 2026 Talaria. All rights reserved.</p>
         <a
           href="/privacy"
           className="hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
