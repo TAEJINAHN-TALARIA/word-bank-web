@@ -51,6 +51,22 @@ const languages = [
   "포르투갈어", "아랍어", "라틴어", "힌디어", "벵골어", "러시아어", "인도네시아어",
 ];
 
+function DownloadButton({ className = "" }: { className?: string }) {
+  return (
+    <a
+      href={PLAY_STORE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`inline-flex items-center gap-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-6 py-3 rounded-xl font-semibold text-sm hover:opacity-80 transition-opacity ${className}`}
+    >
+      <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
+        <path d="M3.18 23.76c.3.17.64.24.99.19l13.12-11.95L13.65 8.4 3.18 23.76zm17.3-10.7-3.3-1.9-3.73 3.4 3.73 3.38 3.32-1.92a1.55 1.55 0 0 0 0-2.96zM3 .27a1.55 1.55 0 0 0-.82 1.37v20.72c0 .58.3 1.08.82 1.36L13.3 12 3 .27zm10.65 3.33-9.47 8.64 3.64 3.62 5.83-12.26z" />
+      </svg>
+      Google Play에서 다운로드
+    </a>
+  );
+}
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
@@ -66,17 +82,7 @@ export default function Home() {
           <br />
           AI가 즉시 뜻, 예문, 유의어까지 찾아드려요.
         </p>
-        <a
-          href={PLAY_STORE_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-3 bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 px-6 py-3 rounded-xl font-semibold text-sm hover:opacity-80 transition-opacity"
-        >
-          <svg viewBox="0 0 24 24" className="w-5 h-5 fill-current" aria-hidden="true">
-            <path d="M3.18 23.76c.3.17.64.24.99.19l13.12-11.95L13.65 8.4 3.18 23.76zm17.3-10.7-3.3-1.9-3.73 3.4 3.73 3.38 3.32-1.92a1.55 1.55 0 0 0 0-2.96zM3 .27a1.55 1.55 0 0 0-.82 1.37v20.72c0 .58.3 1.08.82 1.36L13.3 12 3 .27zm10.65 3.33-9.47 8.64 3.64 3.62 5.83-12.26z" />
-          </svg>
-          Google Play에서 다운로드
-        </a>
+        <DownloadButton />
         <p className="text-xs text-zinc-400 dark:text-zinc-600 mt-3">
           iOS 버전은 준비 중입니다.
         </p>
@@ -139,6 +145,14 @@ export default function Home() {
             </span>
           ))}
         </div>
+      </section>
+
+      {/* CTA */}
+      <section className="flex flex-col items-center text-center px-6 pb-24">
+        <h2 className="text-2xl font-bold mb-6 text-zinc-800 dark:text-zinc-200">
+          지금 바로 시작해보세요
+        </h2>
+        <DownloadButton />
       </section>
 
       {/* Footer */}
