@@ -1,4 +1,8 @@
 {
+  "LocaleSwitcher": {
+    "ko": "한국어",
+    "en": "English"
+  },
   "Metadata": {
     "title": "Word Bank — AI 단어장 & 리딩",
     "description": "AI가 단어 뜻과 예문을 자동으로 채워주고, 읽기 콘텐츠와 Leitner 복습으로 완벽하게 익혀요. 14개 언어 지원.",

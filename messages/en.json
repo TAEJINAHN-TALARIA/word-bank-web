@@ -1,4 +1,8 @@
 {
+  "LocaleSwitcher": {
+    "ko": "한국어",
+    "en": "English"
+  },
   "Metadata": {
     "title": "Word Bank — AI Vocabulary & Reading",
     "description": "AI instantly fills in word meanings and example sentences, and reading content plus Leitner review help you master them completely. Supports 14 languages.",
