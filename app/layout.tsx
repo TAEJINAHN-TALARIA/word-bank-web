@@ -13,11 +13,11 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Word Bank — AI 단어장",
-  description: "단어를 저장하면 AI가 즉시 뜻, 예문, 유의어까지 찾아드려요. Leitner 시스템으로 효율적으로 복습하세요.",
+  title: "Word Bank — AI 단어장 & 리딩",
+  description: "AI가 단어 뜻과 예문을 자동으로 채워주고, 읽기 콘텐츠와 Leitner 복습으로 완벽하게 익혀요. 14개 언어 지원.",
   openGraph: {
-    title: "Word Bank — AI 단어장",
-    description: "단어를 저장하면 AI가 즉시 뜻, 예문, 유의어까지 찾아드려요.",
+    title: "Word Bank — AI 단어장 & 리딩",
+    description: "AI가 단어 뜻과 예문을 자동으로 채워주고, 읽기 콘텐츠와 Leitner 복습으로 완벽하게 익혀요.",
     type: "website",
   },
 };
@@ -29,7 +29,7 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="ko"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
