@@ -1,5 +1,6 @@
 import { getTranslations, setRequestLocale } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
+import LocaleSwitcher from "@/components/LocaleSwitcher";
 
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.taejinahn.wordbank";
 
@@ -47,6 +48,10 @@ export default async function Home({ params }: Props) {
 
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
+      <header className="flex justify-end px-6 pt-6">
+        <LocaleSwitcher />
+      </header>
+
       {/* Hero */}
       <section className="flex flex-col items-center text-center px-6 pt-24 pb-20">
         <div className="text-7xl mb-6">📚</div>
