@@ -46,6 +46,11 @@ const features = [
   },
 ];
 
+const languages = [
+  "한국어", "영어", "일본어", "중국어", "독일어", "프랑스어", "스페인어",
+  "포르투갈어", "아랍어", "라틴어", "힌디어", "벵골어", "러시아어", "인도네시아어",
+];
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
@@ -112,6 +117,26 @@ export default function Home() {
               <h3 className="font-semibold text-base mb-1">{f.title}</h3>
               <p className="text-sm text-zinc-500 dark:text-zinc-400 leading-relaxed">{f.desc}</p>
             </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Languages */}
+      <section className="px-6 pb-24 max-w-3xl mx-auto text-center">
+        <h2 className="text-2xl font-bold mb-4 text-zinc-800 dark:text-zinc-200">
+          14개 언어 지원
+        </h2>
+        <p className="text-sm text-zinc-500 dark:text-zinc-400 mb-8">
+          원하는 언어로 학습하세요.
+        </p>
+        <div className="flex flex-wrap justify-center gap-2">
+          {languages.map((lang) => (
+            <span
+              key={lang}
+              className="rounded-full border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 px-4 py-1.5 text-sm text-zinc-600 dark:text-zinc-300"
+            >
+              {lang}
+            </span>
           ))}
         </div>
       </section>
