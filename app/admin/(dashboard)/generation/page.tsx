@@ -55,7 +55,12 @@ export default async function GenerationPage() {
                 <Badge variant={statusBadgeVariant(session.status)}>{session.status}</Badge>
               </TableCell>
               <TableCell>{session.targetLevel}</TableCell>
-              <TableCell>{session.combo}</TableCell>
+              <TableCell className="whitespace-normal">
+                {session.combo.mainPremise || "—"}
+                {session.combo.genreTone && (
+                  <span className="text-muted-foreground"> · {session.combo.genreTone}</span>
+                )}
+              </TableCell>
               <TableCell className="whitespace-normal">
                 {session.targetLanguages.join(", ")}
               </TableCell>

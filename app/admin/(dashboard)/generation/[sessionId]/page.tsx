@@ -39,13 +39,33 @@ export default async function GenerationDetailPage({
       <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:max-w-md">
         <dt className="text-muted-foreground">레벨</dt>
         <dd>{session.targetLevel}</dd>
-        <dt className="text-muted-foreground">Combo</dt>
-        <dd>{session.combo}</dd>
         <dt className="text-muted-foreground">대상 언어</dt>
         <dd>{session.targetLanguages.join(", ")}</dd>
         <dt className="text-muted-foreground">생성일</dt>
         <dd>{session.createdAt}</dd>
       </dl>
+
+      <div>
+        <h2 className="mb-3 text-sm font-semibold tracking-tight">Combo</h2>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:max-w-md">
+          <dt className="text-muted-foreground">메인 소재</dt>
+          <dd>{session.combo.mainPremise || "—"}</dd>
+          <dt className="text-muted-foreground">부차 소재</dt>
+          <dd>{session.combo.subMotif || "—"}</dd>
+          <dt className="text-muted-foreground">장르/톤</dt>
+          <dd>{session.combo.genreTone || "—"}</dd>
+          <dt className="text-muted-foreground">배경</dt>
+          <dd>{session.combo.setting || "—"}</dd>
+          <dt className="text-muted-foreground">관계</dt>
+          <dd>{session.combo.relationship || "—"}</dd>
+          <dt className="text-muted-foreground">시점</dt>
+          <dd>{session.combo.viewpoint || "—"}</dd>
+          <dt className="text-muted-foreground">결말</dt>
+          <dd>{session.combo.ending || "—"}</dd>
+          <dt className="text-muted-foreground">갈등 해결</dt>
+          <dd>{session.combo.conflictResolution || "—"}</dd>
+        </dl>
+      </div>
 
       <div>
         <h2 className="mb-3 text-sm font-semibold tracking-tight">Layer 6 게이트 결과</h2>

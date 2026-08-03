@@ -1,12 +1,36 @@
 import "server-only";
 import { getAdminFirestore } from "@/lib/firebase/admin";
 
+export type ComboInfo = {
+  mainPremise: string;
+  subMotif: string;
+  genreTone: string;
+  setting: string;
+  relationship: string;
+  viewpoint: string;
+  ending: string;
+  conflictResolution: string;
+};
+
+function normalizeCombo(combo: Partial<ComboInfo> | undefined): ComboInfo {
+  return {
+    mainPremise: combo?.mainPremise ?? "",
+    subMotif: combo?.subMotif ?? "",
+    genreTone: combo?.genreTone ?? "",
+    setting: combo?.setting ?? "",
+    relationship: combo?.relationship ?? "",
+    viewpoint: combo?.viewpoint ?? "",
+    ending: combo?.ending ?? "",
+    conflictResolution: combo?.conflictResolution ?? "",
+  };
+}
+
 export type PipelineSessionSummary = {
   id: string;
   status: string;
   runId: string;
   targetLevel: string;
-  combo: string;
+  combo: ComboInfo;
   targetLanguages: string[];
   createdAt: string;
 };
@@ -26,7 +50,7 @@ export async function listPipelineSessions(): Promise<PipelineSessionSummary[]> 
       status: data.status,
       runId: data.runId,
       targetLevel: data.targetLevel,
-      combo: data.combo,
+      combo: normalizeCombo(data.combo),
       targetLanguages: data.targetLanguages ?? [],
       createdAt: data.createdAt?.toDate?.().toISOString() ?? "",
     };
@@ -75,7 +99,7 @@ export async function getPipelineSessionDetail(
     status: data.status,
     runId: data.runId,
     targetLevel: data.targetLevel,
-    combo: data.combo,
+    combo: normalizeCombo(data.combo),
     targetLanguages: data.targetLanguages ?? [],
     createdAt: data.createdAt?.toDate?.().toISOString() ?? "",
     layer6Gates,
