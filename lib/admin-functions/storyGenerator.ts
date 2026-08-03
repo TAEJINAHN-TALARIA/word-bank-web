@@ -32,7 +32,8 @@ export async function fetchPendingReviews(): Promise<PendingReviewItem[]> {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error ?? `검토 대기 목록 조회 실패 (${response.status})`);
   }
-  return response.json();
+  const data = await response.json();
+  return Array.isArray(data) ? data : [];
 }
 
 export async function publishStory(sessionId: string, target: string): Promise<void> {

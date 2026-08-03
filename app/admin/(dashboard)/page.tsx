@@ -4,8 +4,12 @@ import { fetchPendingReviews } from "@/lib/admin-functions/storyGenerator";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default async function AdminHomePage() {
-  const [sessions, pending] = await Promise.all([listPipelineSessions(), fetchPendingReviews()]);
+  const [sessions, pending] = await Promise.all([
+    listPipelineSessions(),
+    fetchPendingReviews().catch(() => null),
+  ]);
   const inProgressCount = sessions.filter((s) => s.status === "in_progress").length;
+  const pendingCount = pending === null ? "—" : pending.length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -27,7 +31,7 @@ export default async function AdminHomePage() {
         <Link href="/admin/review" className="block">
           <Card className="transition-colors hover:bg-muted/40">
             <CardContent>
-              <div className="text-3xl font-semibold tabular-nums">{pending.length}</div>
+              <div className="text-3xl font-semibold tabular-nums">{pendingCount}</div>
               <div className="text-sm text-muted-foreground">검토 대기 중인 콘텐츠</div>
             </CardContent>
           </Card>

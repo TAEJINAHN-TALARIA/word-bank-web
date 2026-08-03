@@ -39,7 +39,8 @@ function AdminLoginPageContent() {
         return;
       }
 
-      const redirectTo = searchParams.get("redirect") || "/admin";
+      const raw = searchParams.get("redirect");
+      const redirectTo = raw && raw.startsWith("/admin") ? raw : "/admin";
       router.push(redirectTo);
     } catch {
       setError("로그인 중 오류가 발생했습니다");

@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { getAdminSession } from "@/lib/auth/session";
+import { SignOutButton } from "@/components/admin/SignOutButton";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "홈" },
@@ -34,6 +35,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
             ))}
           </ul>
         </nav>
+        <div className="mt-auto">
+          <SignOutButton />
+        </div>
       </aside>
       <main className="flex-1 overflow-x-auto p-8">{children}</main>
     </div>
