@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "idToken이 필요합니다" }, { status: 400 });
   }
 
-  const adminAuth = await getAdminAuth();
+  const adminAuth = getAdminAuth();
   let decoded;
   try {
     decoded = await adminAuth.verifyIdToken(idToken);

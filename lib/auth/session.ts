@@ -9,8 +9,7 @@ export async function getAdminSession(): Promise<{ uid: string } | null> {
   if (!sessionCookie) return null;
 
   try {
-    const adminAuth = await getAdminAuth();
-    const decoded = await adminAuth.verifySessionCookie(sessionCookie, true);
+    const decoded = await getAdminAuth().verifySessionCookie(sessionCookie, true);
     if (decoded.admin !== true) return null;
     return { uid: decoded.uid };
   } catch {
