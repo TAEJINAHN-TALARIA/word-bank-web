@@ -4,6 +4,14 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signInWithPopup, signOut } from "firebase/auth";
 import { getFirebaseAuth, googleAuthProvider } from "@/lib/firebase/client";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 function AdminLoginPageContent() {
   const router = useRouter();
@@ -41,26 +49,38 @@ function AdminLoginPageContent() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <h1 className="text-xl font-semibold">Word Bank Admin</h1>
-        <button
-          type="button"
-          onClick={handleSignIn}
-          disabled={loading}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-white disabled:opacity-50"
-        >
-          {loading ? "로그인 중..." : "Google 계정으로 로그인"}
-        </button>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-      </div>
+    <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle className="text-lg">Word Bank Admin</CardTitle>
+          <CardDescription>
+            관리자 대시보드에 접속하려면 Google 계정으로 로그인하세요.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          <Button type="button" onClick={handleSignIn} disabled={loading} className="w-full">
+            {loading ? "로그인 중..." : "Google 계정으로 로그인"}
+          </Button>
+          {error && (
+            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {error}
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </main>
   );
 }
 
 export default function AdminLoginPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-screen items-center justify-center">로딩 중...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">
+          로딩 중...
+        </div>
+      }
+    >
       <AdminLoginPageContent />
     </Suspense>
   );
