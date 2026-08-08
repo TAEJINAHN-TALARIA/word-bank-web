@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import type { LanguagePairVolume, TopWord } from "@/lib/data/wordCacheStats";
 import { fetchTopWordsAction } from "@/lib/actions/wordCacheStatsActions";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -21,6 +21,7 @@ export function TopWordsPanel({
   );
   const [words, setWords] = useState(initialWords);
   const [isPending, startTransition] = useTransition();
+  const latestKeyRef = useRef(selectedKey);
 
   if (pairs.length === 0) {
     return <p className="text-sm text-muted-foreground">검색 데이터가 없습니다.</p>;
@@ -28,9 +29,13 @@ export function TopWordsPanel({
 
   function handleChange(key: string) {
     setSelectedKey(key);
+    latestKeyRef.current = key;
     const [wordLanguage, meaningLanguage] = key.split("_");
     startTransition(async () => {
-      setWords(await fetchTopWordsAction(wordLanguage, meaningLanguage));
+      const result = await fetchTopWordsAction(wordLanguage, meaningLanguage);
+      if (latestKeyRef.current === key) {
+        setWords(result);
+      }
     });
   }
 
