@@ -47,3 +47,40 @@ describe('getCacheLoadByLanguage', () => {
     expect(result).toEqual([]);
   });
 });
+
+import { getSearchVolumeByLanguagePair } from './wordCacheStats';
+
+describe('getSearchVolumeByLanguagePair', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('discovered wordLanguage들에 대해서만 언어쌍 조합의 hitCount 합계를 조회한다', async () => {
+    const mockWhere2 = vi.fn((_field: string, _op: string, meaningLanguage: string) => ({
+      aggregate: () => ({
+        get: () =>
+          Promise.resolve({
+            data: () => ({ total: meaningLanguage === 'ko' ? 42 : 0 }),
+          }),
+      }),
+    }));
+    const mockWhere1 = vi.fn(() => ({ where: mockWhere2 }));
+    const mockCollection = vi.fn(() => ({ where: mockWhere1 }));
+    mockGetAdminFirestore.mockReturnValue({ collection: mockCollection } as unknown as Firestore);
+
+    const result = await getSearchVolumeByLanguagePair([{ wordLanguage: 'en', count: 10 }]);
+
+    expect(mockWhere1).toHaveBeenCalledWith('wordLanguage', '==', 'en');
+    expect(result).toEqual([{ wordLanguage: 'en', meaningLanguage: 'ko', hitCount: 42 }]);
+  });
+
+  it('discovered가 비어있으면 쿼리 없이 빈 배열을 반환한다', async () => {
+    const mockCollection = vi.fn();
+    mockGetAdminFirestore.mockReturnValue({ collection: mockCollection } as unknown as Firestore);
+
+    const result = await getSearchVolumeByLanguagePair([]);
+
+    expect(result).toEqual([]);
+    expect(mockCollection).not.toHaveBeenCalled();
+  });
+});
