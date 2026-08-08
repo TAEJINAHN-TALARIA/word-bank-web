@@ -171,3 +171,38 @@ describe('getSearchFailureRates', () => {
     expect(result).toEqual([]);
   });
 });
+
+import { getLocaleDistribution } from './wordCacheStats';
+
+describe('getLocaleDistribution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('최근 문서의 locale 필드를 세어 내림차순으로 반환하고, locale이 없으면 "알 수 없음"으로 묶는다', async () => {
+    const mockGet = vi.fn().mockResolvedValue({
+      docs: [
+        { data: () => ({ locale: 'ko-KR' }) },
+        { data: () => ({ locale: 'ko-KR' }) },
+        { data: () => ({ locale: 'en-US' }) },
+        { data: () => ({}) },
+      ],
+    });
+    const mockSelect = vi.fn(() => ({ get: mockGet }));
+    const mockLimit = vi.fn(() => ({ select: mockSelect }));
+    const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
+    const mockCollection = vi.fn(() => ({ orderBy: mockOrderBy }));
+    mockGetAdminFirestore.mockReturnValue({ collection: mockCollection } as unknown as Firestore);
+
+    const result = await getLocaleDistribution();
+
+    expect(mockCollection).toHaveBeenCalledWith('word_cache');
+    expect(mockOrderBy).toHaveBeenCalledWith('createdAt', 'desc');
+    expect(mockSelect).toHaveBeenCalledWith('locale');
+    expect(result).toEqual([
+      { locale: 'ko-KR', count: 2 },
+      { locale: 'en-US', count: 1 },
+      { locale: '알 수 없음', count: 1 },
+    ]);
+  });
+});

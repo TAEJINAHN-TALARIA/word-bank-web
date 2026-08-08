@@ -116,3 +116,30 @@ export async function getSearchFailureRates(
     })
     .sort((a, b) => b.failureRatio - a.failureRatio);
 }
+
+const LOCALE_SAMPLE_SIZE = 2000;
+const UNKNOWN_LOCALE_LABEL = "알 수 없음";
+
+export interface LocaleDistribution {
+  locale: string;
+  count: number;
+}
+
+export async function getLocaleDistribution(): Promise<LocaleDistribution[]> {
+  const snapshot = await getAdminFirestore()
+    .collection("word_cache")
+    .orderBy("createdAt", "desc")
+    .limit(LOCALE_SAMPLE_SIZE)
+    .select("locale")
+    .get();
+
+  const counts = new Map<string, number>();
+  for (const doc of snapshot.docs) {
+    const locale = (doc.data().locale as string | undefined) ?? UNKNOWN_LOCALE_LABEL;
+    counts.set(locale, (counts.get(locale) ?? 0) + 1);
+  }
+
+  return [...counts.entries()]
+    .map(([locale, count]) => ({ locale, count }))
+    .sort((a, b) => b.count - a.count);
+}
