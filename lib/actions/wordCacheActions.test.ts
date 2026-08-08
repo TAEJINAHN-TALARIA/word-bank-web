@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Firestore } from 'firebase-admin/firestore';
 
 vi.mock('@/lib/firebase/admin');
 vi.mock('@/lib/auth/session');
@@ -26,7 +27,7 @@ describe('restoreWordCacheEntryAction', () => {
     const mockCollection = vi.fn(() => ({ doc: mockDoc }));
     mockGetAdminFirestore.mockReturnValue({
       collection: mockCollection,
-    } as any);
+    } as unknown as Firestore);
 
     const result = await restoreWordCacheEntryAction('run_en_ko');
 
@@ -42,7 +43,7 @@ describe('restoreWordCacheEntryAction', () => {
     const mockCollection = vi.fn(() => ({ doc: mockDoc }));
     mockGetAdminFirestore.mockReturnValue({
       collection: mockCollection,
-    } as any);
+    } as unknown as Firestore);
 
     const result = await restoreWordCacheEntryAction('run_en_ko');
 
@@ -61,7 +62,7 @@ describe('restoreWordCacheEntryAction', () => {
     const mockCollection = vi.fn(() => ({ doc: mockDoc }));
     mockGetAdminFirestore.mockReturnValue({
       collection: mockCollection,
-    } as any);
+    } as unknown as Firestore);
 
     const result = await restoreWordCacheEntryAction('nonexistent_en_ko');
 

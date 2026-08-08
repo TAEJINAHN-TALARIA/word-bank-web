@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Firestore } from 'firebase-admin/firestore';
 
 vi.mock('server-only', () => ({}));
 
@@ -47,7 +48,7 @@ describe('listUserFeedback', () => {
 
     mockGetAdminFirestore.mockReturnValue({
       collection: mockCollection,
-    } as any);
+    } as unknown as Firestore);
   });
 
   it('userFeedback != null 조건으로 최신순 페이지를 가져오고, 다음 페이지가 있으면 nextCursor를 채운다', async () => {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Firestore } from 'firebase-admin/firestore';
 
 vi.mock('server-only', () => ({}));
 
@@ -26,7 +27,7 @@ describe('listAutoHiddenWords', () => {
 
     mockGetAdminFirestore.mockReturnValue({
       collection: mockCollection,
-    } as any);
+    } as unknown as Firestore);
 
     mockGet.mockResolvedValueOnce({
       docs: [
@@ -58,7 +59,7 @@ describe('listAutoHiddenWords', () => {
 
     mockGetAdminFirestore.mockReturnValue({
       collection: mockCollection,
-    } as any);
+    } as unknown as Firestore);
 
     mockGet.mockResolvedValueOnce({ docs: [] });
 
