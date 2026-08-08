@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/admin", label: "홈" },
   { href: "/admin/generation", label: "생성 진행상황" },
   { href: "/admin/review", label: "검토/게시" },
+  { href: "/admin/quality", label: "품질 리포트" },
 ];
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
