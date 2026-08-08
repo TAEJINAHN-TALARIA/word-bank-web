@@ -132,3 +132,42 @@ describe('getTopWordsForPair', () => {
     expect(mockLimit).toHaveBeenCalledWith(10);
   });
 });
+
+import { getSearchFailureRates } from './wordCacheStats';
+
+describe('getSearchFailureRates', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('word_search_failures를 읽어 대응하는 hitCount와 합쳐 실패 비율을 계산한다', async () => {
+    const mockGet = vi.fn().mockResolvedValue({
+      docs: [
+        { id: 'en_ko', data: () => ({ wordLanguage: 'en', meaningLanguage: 'ko', failCount: 10 }) },
+        { id: 'ja_en', data: () => ({ wordLanguage: 'ja', meaningLanguage: 'en', failCount: 5 }) },
+      ],
+    });
+    const mockCollection = vi.fn(() => ({ get: mockGet }));
+    mockGetAdminFirestore.mockReturnValue({ collection: mockCollection } as unknown as Firestore);
+
+    const result = await getSearchFailureRates([
+      { wordLanguage: 'en', meaningLanguage: 'ko', hitCount: 90 },
+    ]);
+
+    expect(mockCollection).toHaveBeenCalledWith('word_search_failures');
+    expect(result).toEqual([
+      { wordLanguage: 'ja', meaningLanguage: 'en', failCount: 5, hitCount: 0, failureRatio: 1 },
+      { wordLanguage: 'en', meaningLanguage: 'ko', failCount: 10, hitCount: 90, failureRatio: 0.1 },
+    ]);
+  });
+
+  it('word_search_failures가 비어있으면 빈 배열을 반환한다', async () => {
+    const mockGet = vi.fn().mockResolvedValue({ docs: [] });
+    const mockCollection = vi.fn(() => ({ get: mockGet }));
+    mockGetAdminFirestore.mockReturnValue({ collection: mockCollection } as unknown as Firestore);
+
+    const result = await getSearchFailureRates([]);
+
+    expect(result).toEqual([]);
+  });
+});

@@ -82,3 +82,37 @@ export async function getTopWordsForPair(
     return { word: data.word, hitCount: data.hitCount };
   });
 }
+
+export interface SearchFailureRate {
+  wordLanguage: string;
+  meaningLanguage: string;
+  failCount: number;
+  hitCount: number;
+  failureRatio: number;
+}
+
+export async function getSearchFailureRates(
+  pairVolumes: LanguagePairVolume[],
+): Promise<SearchFailureRate[]> {
+  const snapshot = await getAdminFirestore().collection("word_search_failures").get();
+
+  const hitCountByPairKey = new Map(
+    pairVolumes.map((p) => [`${p.wordLanguage}_${p.meaningLanguage}`, p.hitCount]),
+  );
+
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      const failCount: number = data.failCount ?? 0;
+      const hitCount = hitCountByPairKey.get(doc.id) ?? 0;
+      const total = failCount + hitCount;
+      return {
+        wordLanguage: data.wordLanguage,
+        meaningLanguage: data.meaningLanguage,
+        failCount,
+        hitCount,
+        failureRatio: total > 0 ? failCount / total : 0,
+      };
+    })
+    .sort((a, b) => b.failureRatio - a.failureRatio);
+}
