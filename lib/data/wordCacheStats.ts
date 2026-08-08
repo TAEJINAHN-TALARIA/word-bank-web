@@ -58,3 +58,27 @@ export async function getSearchVolumeByLanguagePair(
 
   return results.filter((r) => r.hitCount > 0).sort((a, b) => b.hitCount - a.hitCount);
 }
+
+export interface TopWord {
+  word: string;
+  hitCount: number;
+}
+
+export async function getTopWordsForPair(
+  wordLanguage: string,
+  meaningLanguage: string,
+  limitCount = 10,
+): Promise<TopWord[]> {
+  const snapshot = await getAdminFirestore()
+    .collection("word_cache")
+    .where("wordLanguage", "==", wordLanguage)
+    .where("meaningLanguage", "==", meaningLanguage)
+    .orderBy("hitCount", "desc")
+    .limit(limitCount)
+    .get();
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data();
+    return { word: data.word, hitCount: data.hitCount };
+  });
+}

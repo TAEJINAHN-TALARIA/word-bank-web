@@ -84,3 +84,51 @@ describe('getSearchVolumeByLanguagePair', () => {
     expect(mockCollection).not.toHaveBeenCalled();
   });
 });
+
+import { getTopWordsForPair } from './wordCacheStats';
+
+describe('getTopWordsForPair', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('언어쌍으로 필터링하고 hitCount 내림차순 limit개를 조회한다', async () => {
+    const mockGet = vi.fn().mockResolvedValue({
+      docs: [
+        { data: () => ({ word: 'run', hitCount: 50 }) },
+        { data: () => ({ word: 'walk', hitCount: 20 }) },
+      ],
+    });
+    const mockLimit = vi.fn(() => ({ get: mockGet }));
+    const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
+    const mockWhere2 = vi.fn(() => ({ orderBy: mockOrderBy }));
+    const mockWhere1 = vi.fn(() => ({ where: mockWhere2 }));
+    const mockCollection = vi.fn(() => ({ where: mockWhere1 }));
+    mockGetAdminFirestore.mockReturnValue({ collection: mockCollection } as unknown as Firestore);
+
+    const result = await getTopWordsForPair('en', 'ko', 5);
+
+    expect(mockWhere1).toHaveBeenCalledWith('wordLanguage', '==', 'en');
+    expect(mockWhere2).toHaveBeenCalledWith('meaningLanguage', '==', 'ko');
+    expect(mockOrderBy).toHaveBeenCalledWith('hitCount', 'desc');
+    expect(mockLimit).toHaveBeenCalledWith(5);
+    expect(result).toEqual([
+      { word: 'run', hitCount: 50 },
+      { word: 'walk', hitCount: 20 },
+    ]);
+  });
+
+  it('limitCount 생략 시 기본값 10을 사용한다', async () => {
+    const mockGet = vi.fn().mockResolvedValue({ docs: [] });
+    const mockLimit = vi.fn(() => ({ get: mockGet }));
+    const mockOrderBy = vi.fn(() => ({ limit: mockLimit }));
+    const mockWhere2 = vi.fn(() => ({ orderBy: mockOrderBy }));
+    const mockWhere1 = vi.fn(() => ({ where: mockWhere2 }));
+    const mockCollection = vi.fn(() => ({ where: mockWhere1 }));
+    mockGetAdminFirestore.mockReturnValue({ collection: mockCollection } as unknown as Firestore);
+
+    await getTopWordsForPair('en', 'ko');
+
+    expect(mockLimit).toHaveBeenCalledWith(10);
+  });
+});
