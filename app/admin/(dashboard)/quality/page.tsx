@@ -10,9 +10,9 @@ import { Card, CardContent } from "@/components/ui/card";
 
 export default async function QualityReportPage() {
   const [reports, feedbackPage, autoHidden] = await Promise.all([
-    listPromptAnalysisReports(),
-    listUserFeedback(),
-    listAutoHiddenWords(),
+    listPromptAnalysisReports().catch(() => []),
+    listUserFeedback().catch(() => ({ items: [], nextCursor: null })),
+    listAutoHiddenWords().catch(() => []),
   ]);
   const latestReport = reports[reports.length - 1];
 
