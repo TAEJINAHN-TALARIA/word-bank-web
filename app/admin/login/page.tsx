@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { InlineError } from "@/components/admin/InlineError";
 
 function AdminLoginPageContent() {
   const router = useRouter();
@@ -62,11 +63,7 @@ function AdminLoginPageContent() {
           <Button type="button" onClick={handleSignIn} disabled={loading} className="w-full">
             {loading ? "로그인 중..." : "Google 계정으로 로그인"}
           </Button>
-          {error && (
-            <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+          {error && <InlineError message={error} />}
         </CardContent>
       </Card>
     </main>

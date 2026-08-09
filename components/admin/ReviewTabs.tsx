@@ -8,6 +8,7 @@ import { statusBadgeVariant } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyTableRow } from "@/components/admin/EmptyTableRow";
+import { InlineError } from "@/components/admin/InlineError";
 import {
   Table,
   TableBody,
@@ -56,11 +57,7 @@ export function ReviewTabs({
         <TabsTrigger value="published">게시됨 ({published.length})</TabsTrigger>
       </TabsList>
 
-      {error && (
-        <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {error && <InlineError message={error} />}
 
       <TabsContent value="pending">
         <Table>
