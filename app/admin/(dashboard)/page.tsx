@@ -21,7 +21,7 @@ export default async function AdminHomePage() {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:max-w-xl sm:grid-cols-2">
         <Link href="/admin/generation" className="block">
-          <Card className="transition-colors hover:bg-muted/40">
+          <Card className="border-l-4 border-l-primary transition-colors hover:bg-muted/40">
             <CardContent>
               <div className="text-3xl font-semibold tabular-nums">{inProgressCount}</div>
               <div className="text-sm text-muted-foreground">진행 중인 생성 run</div>
@@ -29,7 +29,7 @@ export default async function AdminHomePage() {
           </Card>
         </Link>
         <Link href="/admin/review" className="block">
-          <Card className="transition-colors hover:bg-muted/40">
+          <Card className="border-l-4 border-l-primary transition-colors hover:bg-muted/40">
             <CardContent>
               <div className="text-3xl font-semibold tabular-nums">{pendingCount}</div>
               <div className="text-sm text-muted-foreground">검토 대기 중인 콘텐츠</div>
