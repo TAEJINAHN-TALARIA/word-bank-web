@@ -54,3 +54,28 @@ export async function recallStoryAction(
   revalidatePath("/admin/review");
   return {};
 }
+
+export async function publishStoriesAction(
+  items: { sessionId: string; target: string }[],
+): Promise<{ sessionId: string; target: string; error?: string }[]> {
+  const session = await getAdminSession();
+  if (!session) {
+    return items.map((item) => ({ ...item, error: "관리자 로그인이 필요합니다" }));
+  }
+
+  const results = await Promise.allSettled(
+    items.map((item) => callPublishStory(item.sessionId, item.target)),
+  );
+
+  const mapped = results.map((result, i) => {
+    const item = items[i];
+    if (result.status === "fulfilled") return { ...item };
+    return {
+      ...item,
+      error: result.reason instanceof Error ? result.reason.message : "게시 실패",
+    };
+  });
+
+  revalidatePath("/admin/review");
+  return mapped;
+}
