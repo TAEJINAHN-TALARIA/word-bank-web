@@ -14,10 +14,10 @@ const badgeVariants = cva(
           "bg-secondary text-secondary-foreground [a]:hover:bg-secondary/80",
         destructive:
           "bg-destructive/10 text-destructive focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:focus-visible:ring-destructive/40 [a]:hover:bg-destructive/20",
-        success:
-          "bg-emerald-500/10 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 [a]:hover:bg-emerald-500/20",
-        warning:
-          "bg-amber-500/10 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400 [a]:hover:bg-amber-500/20",
+        // 관리자 UI에는 동작하는 다크 모드가 없다(레이아웃 배경이 라이트 고정).
+        // `dark:` 변형은 OS 설정만으로 발동해 밝은 배경 위에 밝은 텍스트를 그리므로 두지 않는다.
+        success: "bg-emerald-500/10 text-emerald-700 [a]:hover:bg-emerald-500/20",
+        warning: "bg-amber-500/10 text-amber-700 [a]:hover:bg-amber-500/20",
         outline:
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:

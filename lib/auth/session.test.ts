@@ -77,4 +77,18 @@ describe("getAdminSession", () => {
     expect(second).toBeNull();
     expect(mockVerify).toHaveBeenCalledTimes(2);
   });
+
+  it("verifySessionCookie가 실패하면 null을 반환하고 캐시를 남기지 않는다", async () => {
+    mockCookieValue("cookie-verify-throws");
+    const mockVerify = vi.fn().mockRejectedValue(new Error("session cookie revoked"));
+    mockGetAdminAuth.mockReturnValue({ verifySessionCookie: mockVerify } as never);
+
+    const first = await getAdminSession();
+    const second = await getAdminSession();
+
+    expect(first).toBeNull();
+    expect(second).toBeNull();
+    // 실패한 검증이 되살아날 수 있는 캐시 엔트리를 남기지 않았음을 확인한다.
+    expect(mockVerify).toHaveBeenCalledTimes(2);
+  });
 });

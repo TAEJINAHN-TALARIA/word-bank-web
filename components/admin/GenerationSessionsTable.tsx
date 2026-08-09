@@ -36,6 +36,10 @@ export function GenerationSessionsTable({
     startTransition(async () => {
       try {
         const page = await fetchMoreSessionsAction(cursor);
+        if ("error" in page) {
+          setError(page.error);
+          return;
+        }
         setSessions((prev) => [...prev, ...page.sessions]);
         setCursor(page.nextCursor);
       } catch (err) {

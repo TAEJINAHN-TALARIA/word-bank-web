@@ -37,10 +37,24 @@ export function ReviewTabs({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const [published, setPublished] = useState(initialPublished);
+  // `initialPublished`는 서버 컴포넌트가 매 렌더마다 내려주는 1페이지(source of truth)다.
+  // publish/recall 후 revalidatePath("/admin/review")로 새 prop이 오면 아래에서
+  // "렌더 중 상태 조정" 패턴으로 추가 페이지 상태를 리셋해 목록이 stale해지지 않게 한다.
+  const [extraPublished, setExtraPublished] = useState<PublishedStory[]>([]);
   const [publishedCursor, setPublishedCursor] = useState(initialPublishedCursor);
+  const [prevInitialPublished, setPrevInitialPublished] = useState(initialPublished);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [isLoadingMore, startLoadMoreTransition] = useTransition();
+
+  if (prevInitialPublished !== initialPublished) {
+    setPrevInitialPublished(initialPublished);
+    setExtraPublished([]);
+    setPublishedCursor(initialPublishedCursor);
+    setLoadMoreError(null);
+  }
+
+  const published =
+    extraPublished.length > 0 ? [...initialPublished, ...extraPublished] : initialPublished;
 
   function handlePublish(sessionId: string, target: string) {
     setError(null);
@@ -64,7 +78,11 @@ export function ReviewTabs({
     startLoadMoreTransition(async () => {
       try {
         const page = await fetchMorePublishedStoriesAction(publishedCursor);
-        setPublished((prev) => [...prev, ...page.stories]);
+        if ("error" in page) {
+          setLoadMoreError(page.error);
+          return;
+        }
+        setExtraPublished((prev) => [...prev, ...page.stories]);
         setPublishedCursor(page.nextCursor);
       } catch (err) {
         setLoadMoreError(err instanceof Error ? err.message : "목록을 더 불러오지 못했습니다");

@@ -27,9 +27,12 @@ export async function listPublishedStories(cursorId?: string): Promise<Published
 
   if (cursorId) {
     const cursorDoc = await db.collection("stories").doc(cursorId).get();
-    if (cursorDoc.exists) {
-      query = query.startAfter(cursorDoc);
+    // 커서 문서가 삭제된 경우 startAfter 없이 조회하면 1페이지를 중복으로 반환하게 된다.
+    // 중복 대신 빈 페이지를 반환해 "더 보기"가 조용히 종료되도록 한다.
+    if (!cursorDoc.exists) {
+      return { stories: [], nextCursor: null };
     }
+    query = query.startAfter(cursorDoc);
   }
 
   const snapshot = await query.get();
