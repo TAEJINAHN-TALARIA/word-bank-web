@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyTableRow } from "@/components/admin/EmptyTableRow";
 import { InlineError } from "@/components/admin/InlineError";
+import { LabeledList } from "@/components/admin/LabeledList";
 import {
   Table,
   TableBody,
@@ -99,11 +100,11 @@ export function ReviewTabs({
               <TableRow key={`${item.sessionId}_${item.target}`}>
                 <TableCell className="whitespace-normal">
                   <div className="font-medium">{item.title ?? "(제목 없음)"}</div>
-                  {item.ruleBaseWarnings.length > 0 && (
-                    <div className="mt-1 text-xs text-amber-700 dark:text-amber-500">
-                      경고: {item.ruleBaseWarnings.join(", ")}
-                    </div>
-                  )}
+                  <LabeledList
+                    label="경고"
+                    items={item.ruleBaseWarnings}
+                    className="mt-1 text-xs text-amber-700 dark:text-amber-500"
+                  />
                 </TableCell>
                 <TableCell>
                   {item.lang} / {item.level}

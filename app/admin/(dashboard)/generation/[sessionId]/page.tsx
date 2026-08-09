@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getPipelineSessionDetail } from "@/lib/data/pipelineSessions";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeVariant, statusBorderClass } from "@/lib/status";
+import { LabeledList } from "@/components/admin/LabeledList";
 
 export default async function GenerationDetailPage({
   params,
@@ -69,16 +70,16 @@ export default async function GenerationDetailPage({
                     <span className="text-xs text-muted-foreground">재시도 {gate.retryCount}회</span>
                   </div>
                 </div>
-                {gate.ruleBaseWarnings.length > 0 && (
-                  <p className="mt-2 text-amber-700 dark:text-amber-500">
-                    경고: {gate.ruleBaseWarnings.join(", ")}
-                  </p>
-                )}
-                {gate.llmEvalReasons.length > 0 && (
-                  <p className="mt-1 text-muted-foreground">
-                    판정 사유: {gate.llmEvalReasons.join(", ")}
-                  </p>
-                )}
+                <LabeledList
+                  label="경고"
+                  items={gate.ruleBaseWarnings}
+                  className="mt-2 text-sm text-amber-700 dark:text-amber-500"
+                />
+                <LabeledList
+                  label="판정 사유"
+                  items={gate.llmEvalReasons}
+                  className="mt-1 text-sm text-muted-foreground"
+                />
               </li>
             );
           })}
