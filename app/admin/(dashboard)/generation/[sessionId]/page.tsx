@@ -1,22 +1,7 @@
 import { notFound } from "next/navigation";
 import { getPipelineSessionDetail } from "@/lib/data/pipelineSessions";
 import { Badge } from "@/components/ui/badge";
-
-function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("fail") || normalized.includes("error")) return "destructive";
-  if (normalized.includes("progress") || normalized.includes("pending")) return "secondary";
-  if (normalized.includes("complete") || normalized.includes("done") || normalized.includes("success")) {
-    return "default";
-  }
-  return "outline";
-}
-
-function gateBorderClass(variant: ReturnType<typeof statusBadgeVariant>): string {
-  if (variant === "destructive") return "border-l-destructive";
-  if (variant === "secondary") return "border-l-amber-500";
-  return "border-l-border";
-}
+import { statusBadgeVariant, statusBorderClass } from "@/lib/status";
 
 export default async function GenerationDetailPage({
   params,
@@ -75,7 +60,7 @@ export default async function GenerationDetailPage({
             return (
               <li
                 key={gate.target}
-                className={`rounded-lg border-l-4 bg-card p-4 text-sm ring-1 ring-foreground/10 ${gateBorderClass(variant)}`}
+                className={`rounded-lg border-l-4 bg-card p-4 text-sm ring-1 ring-foreground/10 ${statusBorderClass(variant)}`}
               >
                 <div className="flex items-center justify-between gap-3">
                   <span className="font-mono font-medium">{gate.target}</span>

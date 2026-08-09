@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import type { PendingReviewItem } from "@/lib/admin-functions/storyGenerator";
 import type { PublishedStory } from "@/lib/data/stories";
 import { publishStoryAction, recallStoryAction } from "@/lib/actions/adminStoryActions";
+import { statusBadgeVariant } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -85,7 +86,7 @@ export function ReviewTabs({
                   {item.lang} / {item.level}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{item.gateStatus}</Badge>
+                  <Badge variant={statusBadgeVariant(item.gateStatus)}>{item.gateStatus}</Badge>
                 </TableCell>
                 <TableCell className="text-right">
                   <Button

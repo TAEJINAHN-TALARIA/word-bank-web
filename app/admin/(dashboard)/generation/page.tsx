@@ -9,16 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-
-function statusBadgeVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
-  const normalized = status.toLowerCase();
-  if (normalized.includes("fail") || normalized.includes("error")) return "destructive";
-  if (normalized.includes("progress") || normalized.includes("pending")) return "secondary";
-  if (normalized.includes("complete") || normalized.includes("done") || normalized.includes("success")) {
-    return "default";
-  }
-  return "outline";
-}
+import { statusBadgeVariant } from "@/lib/status";
 
 export default async function GenerationPage() {
   const sessions = await listPipelineSessions();
