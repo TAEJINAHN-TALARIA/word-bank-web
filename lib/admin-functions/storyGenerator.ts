@@ -2,6 +2,7 @@ import "server-only";
 
 const BASE_URL = process.env.STORY_GENERATOR_FUNCTIONS_BASE_URL;
 const SHARED_SECRET = process.env.ADMIN_API_SHARED_SECRET;
+const PENDING_REVIEWS_REVALIDATE_SECONDS = 15;
 
 function requireEnv(value: string | undefined, name: string): string {
   if (!value) throw new Error(`${name} 환경변수가 설정되지 않았습니다`);
@@ -26,7 +27,7 @@ export async function fetchPendingReviews(): Promise<PendingReviewItem[]> {
   const response = await fetch(`${baseUrl}/adminListPendingReviews`, {
     method: "GET",
     headers: { "x-admin-api-key": secret },
-    cache: "no-store",
+    next: { revalidate: PENDING_REVIEWS_REVALIDATE_SECONDS },
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
