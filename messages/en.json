@@ -79,7 +79,7 @@
   },
   "Privacy": {
     "title": "Privacy Policy",
-    "lastUpdated": "Last updated: August 2026",
+    "lastUpdated": "Last updated: August 9, 2026",
     "intro": "Word Bank (the \"App\") values your privacy. This policy explains what information the App collects, how it is used, and how it is protected.",
     "sections": {
       "collect": {
@@ -87,9 +87,11 @@
         "highlight": "Word Bank does not collect personally identifiable information. No sign-up, email, or name is required to use the app.",
         "intro": "Data the app processes:",
         "items": [
-          "Learning progress data — Review progress, Leitner box state, notification settings, and other learning data are stored only in local storage on your device.",
-          "App settings — Language, theme, notification time, and other settings are stored only on your device.",
+          "Learning progress data — Review progress, Leitner box state, and other learning data are stored only in local storage on your device.",
+          "App settings — Most settings, such as theme and review reminder times, are stored only on your device. The exception is your learning language, which is also synced to our server when you use the \"Expression Recommendation Notifications\" feature (see below).",
+          "Push notification token and learning language (optional feature) — If you enable \"Expression Recommendation Notifications\" in Settings, your device's push notification token, learning language, and time zone are stored in Google Firebase and linked to your anonymous user identifier so notifications can be delivered. This data is used only for notification delivery, and turning the feature off deletes the stored token.",
           "Anonymous user identifier — The app uses Google Firebase Anonymous Authentication. A randomly generated anonymous ID is issued without sign-up and is not linked to a specific individual.",
+          "Usage analytics — Events for key in-app actions (screen views, adding words, completing study sessions, reading stories, etc.) are sent to Google Analytics for Firebase to help improve the service. Events include only statistical information such as language codes and study mode — never word content or personally identifying information.",
           "Word search queries — When you look up a meaning or example, your search term is passed through the app's own server (Firebase Cloud Functions) to the Google Gemini API for processing. No user identifier is included, and the request is handled anonymously.",
           "AI-generated word data — AI-generated meanings, examples, phonetics (IPA), synonyms, and antonyms are cached in Google Firebase. This is a shared cache used to speed up repeat lookups of the same word, and it is de-identified data not linked to any specific user.",
           "Word correction feedback — If you report or request a correction to a word's content (meaning, examples, synonyms, etc.), the word and your feedback are stored in Google Firebase. Stored feedback may be periodically aggregated and used for AI analysis to improve service quality. It does not include your name, email, or other personally identifying information.",
@@ -116,7 +118,7 @@
         },
         "services": [
           { "name": "Google Gemini API", "purpose": "Generating word meanings and examples (relayed through our own server)" },
-          { "name": "Google Firebase", "purpose": "Anonymous authentication, word cache storage, correction feedback storage" },
+          { "name": "Google Firebase", "purpose": "Anonymous authentication, word cache storage, correction feedback storage, usage analytics, push notification delivery" },
           { "name": "Google AdMob", "purpose": "Banner and rewarded ads (non-personalized)" },
           { "name": "Sentry", "purpose": "App error collection and stability improvement" }
         ],
