@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 
 export function GroupCollapseToggle({
@@ -7,11 +8,12 @@ export function GroupCollapseToggle({
 }: {
   expanded: boolean;
   onToggle: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <button
       type="button"
+      aria-expanded={expanded}
       onClick={onToggle}
       className="flex items-center gap-1.5 text-left hover:underline"
     >
