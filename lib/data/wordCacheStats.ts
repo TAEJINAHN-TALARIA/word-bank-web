@@ -71,9 +71,11 @@ export interface TopWord {
 }
 
 // word_cache 컬렉션에 wordLanguage/meaningLanguage로 필터링한 뒤 hitCount로 orderBy하는
-// 쿼리다. 이 쿼리가 쓰는 색인은 위 getSearchVolumeByLanguagePair와는 별개로,
-// word-bank 저장소(별도 repo)의 firestore.indexes.json에
-// word_cache: wordLanguage ASC, meaningLanguage ASC, hitCount DESC 로 정의돼 있어야 하며,
+// 쿼리다. 필요한 색인은 word-bank 저장소(별도 repo)의 firestore.indexes.json에
+// word_cache: wordLanguage ASC, meaningLanguage ASC, hitCount (ASC 또는 DESC) 로
+// 정의돼 있어야 한다. 앞선 필드가 모두 등호(==) 조건이라 위 getSearchVolumeByLanguagePair가
+// 쓰는 hitCount ASC 색인이 이 orderBy("hitCount","desc")도 함께 서빙할 가능성이 있지만,
+// 확인된 사실은 아니므로 단정하지 않는다 — 실제로는 별도 색인이 필요할 수도 있다.
 // 해당 색인이 없거나 Building 상태면 이 함수는 FAILED_PRECONDITION으로 실패한다.
 export async function getTopWordsForPair(
   wordLanguage: string,

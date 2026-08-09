@@ -17,19 +17,25 @@ import { Card, CardContent } from "@/components/ui/card";
 const INSTRUMENTATION_START_DATE = "2026-08-08";
 
 export default async function WordCacheStatsPage() {
+  // cacheLoad/volumes 조회 실패는 null로 구분해서 남긴다. []로 뭉개버리면 아래
+  // getSearchFailureRates가 "검색량 0"으로 오인해 모든 언어쌍의 무의미 비율을
+  // 100%로 잘못 계산해버리기 때문 (실패와 "데이터 없음"은 다른 상태). cacheLoad가
+  // 실패해도 getSearchVolumeByLanguagePair([])는 자체 early-return으로 []를 정상
+  // 반환해버려 실패가 묻히므로, cacheLoad 실패 시에는 volumes 조회 자체를 건너뛰고
+  // null을 전파한다.
   const cacheLoad = await getCacheLoadByLanguage().catch((error) => {
     console.error("[word-cache] getCacheLoadByLanguage failed", error);
-    return [];
-  });
-
-  // volumes 조회 실패는 null로 구분해서 남긴다. []로 뭉개버리면 아래
-  // getSearchFailureRates가 "검색량 0"으로 오인해 모든 언어쌍의 무의미 비율을
-  // 100%로 잘못 계산해버리기 때문 (실패와 "데이터 없음"은 다른 상태).
-  const volumes = await getSearchVolumeByLanguagePair(cacheLoad).catch((error) => {
-    console.error("[word-cache] getSearchVolumeByLanguagePair failed", error);
     return null;
   });
+  const volumes =
+    cacheLoad === null
+      ? null
+      : await getSearchVolumeByLanguagePair(cacheLoad).catch((error) => {
+          console.error("[word-cache] getSearchVolumeByLanguagePair failed", error);
+          return null;
+        });
   const volumesAvailable = volumes !== null;
+  const safeCacheLoad = cacheLoad ?? [];
   const safeVolumes = volumes ?? [];
 
   const [failureRates, localeDistribution, initialTopWords] = await Promise.all([
@@ -83,7 +89,7 @@ export default async function WordCacheStatsPage() {
         <h2 className="text-lg font-semibold">언어별 캐시 적재량</h2>
         <Card>
           <CardContent>
-            <CacheLoadByLanguageTable loads={cacheLoad} />
+            <CacheLoadByLanguageTable loads={safeCacheLoad} />
           </CardContent>
         </Card>
       </section>
