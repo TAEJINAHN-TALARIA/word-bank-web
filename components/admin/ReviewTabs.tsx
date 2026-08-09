@@ -7,6 +7,7 @@ import { publishStoryAction, recallStoryAction } from "@/lib/actions/adminStoryA
 import { statusBadgeVariant } from "@/lib/status";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EmptyTableRow } from "@/components/admin/EmptyTableRow";
 import {
   Table,
   TableBody,
@@ -101,11 +102,7 @@ export function ReviewTabs({
               </TableRow>
             ))}
             {pending.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
-                  검토 대기 중인 콘텐츠가 없습니다.
-                </TableCell>
-              </TableRow>
+              <EmptyTableRow colSpan={4} message="검토 대기 중인 콘텐츠가 없습니다." />
             )}
           </TableBody>
         </Table>
@@ -145,11 +142,7 @@ export function ReviewTabs({
               </TableRow>
             ))}
             {published.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">
-                  게시된 콘텐츠가 없습니다.
-                </TableCell>
-              </TableRow>
+              <EmptyTableRow colSpan={4} message="게시된 콘텐츠가 없습니다." />
             )}
           </TableBody>
         </Table>
