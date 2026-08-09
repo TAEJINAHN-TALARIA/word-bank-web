@@ -35,15 +35,29 @@ export type PipelineSessionSummary = {
   createdAt: string;
 };
 
-export async function listPipelineSessions(): Promise<PipelineSessionSummary[]> {
+const SESSIONS_PAGE_SIZE = 50;
+
+export type PipelineSessionsPage = {
+  sessions: PipelineSessionSummary[];
+  nextCursor: string | null;
+};
+
+export async function listPipelineSessions(cursorId?: string): Promise<PipelineSessionsPage> {
   const db = getAdminFirestore();
-  const snapshot = await db
+  let query = db
     .collection("pipelineSessions")
     .orderBy("createdAt", "desc")
-    .limit(50)
-    .get();
+    .limit(SESSIONS_PAGE_SIZE);
 
-  return snapshot.docs.map((doc) => {
+  if (cursorId) {
+    const cursorDoc = await db.collection("pipelineSessions").doc(cursorId).get();
+    if (cursorDoc.exists) {
+      query = query.startAfter(cursorDoc);
+    }
+  }
+
+  const snapshot = await query.get();
+  const sessions = snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
       id: doc.id,
@@ -55,6 +69,14 @@ export async function listPipelineSessions(): Promise<PipelineSessionSummary[]> 
       createdAt: data.createdAt?.toDate?.().toISOString() ?? "",
     };
   });
+
+  return {
+    sessions,
+    nextCursor:
+      snapshot.docs.length === SESSIONS_PAGE_SIZE
+        ? snapshot.docs[snapshot.docs.length - 1].id
+        : null,
+  };
 }
 
 export type LayerGateResult = {

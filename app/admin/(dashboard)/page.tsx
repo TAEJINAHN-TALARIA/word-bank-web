@@ -4,11 +4,11 @@ import { fetchPendingReviews } from "@/lib/admin-functions/storyGenerator";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default async function AdminHomePage() {
-  const [sessions, pending] = await Promise.all([
+  const [sessionsPage, pending] = await Promise.all([
     listPipelineSessions(),
     fetchPendingReviews().catch(() => null),
   ]);
-  const inProgressCount = sessions.filter((s) => s.status === "in_progress").length;
+  const inProgressCount = sessionsPage.sessions.filter((s) => s.status === "in_progress").length;
   const pendingCount = pending === null ? "—" : pending.length;
 
   return (
