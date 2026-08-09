@@ -57,3 +57,27 @@ export async function listPublishedStories(cursorId?: string): Promise<Published
         : null,
   };
 }
+
+export type PublishedStoryDetail = {
+  id: string;
+  lang: string;
+  level: string;
+  title: string | null;
+  sessionId: string;
+  target: string;
+};
+
+export async function getPublishedStory(docId: string): Promise<PublishedStoryDetail | null> {
+  const doc = await getAdminFirestore().collection("stories").doc(docId).get();
+  if (!doc.exists) return null;
+
+  const data = doc.data()!;
+  return {
+    id: doc.id,
+    lang: data.lang,
+    level: data.level,
+    title: data.title ?? null,
+    sessionId: data.sessionId,
+    target: data.target,
+  };
+}
