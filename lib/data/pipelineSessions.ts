@@ -73,15 +73,15 @@ export async function getPipelineSessionDetail(
   sessionId: string,
 ): Promise<PipelineSessionDetail | null> {
   const db = getAdminFirestore();
-  const doc = await db.collection("pipelineSessions").doc(sessionId).get();
+  const sessionRef = db.collection("pipelineSessions").doc(sessionId);
+
+  const [doc, gatesSnapshot] = await Promise.all([
+    sessionRef.get(),
+    sessionRef.collection("layer6Gates").get(),
+  ]);
+
   if (!doc.exists) return null;
   const data = doc.data()!;
-
-  const gatesSnapshot = await db
-    .collection("pipelineSessions")
-    .doc(sessionId)
-    .collection("layer6Gates")
-    .get();
 
   const layer6Gates: LayerGateResult[] = gatesSnapshot.docs.map((gateDoc) => {
     const gateData = gateDoc.data();
