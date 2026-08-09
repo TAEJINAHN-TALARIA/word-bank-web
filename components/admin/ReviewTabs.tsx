@@ -1,27 +1,10 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState } from "react";
 import type { PendingReviewItem } from "@/lib/admin-functions/storyGenerator";
 import type { PublishedStory } from "@/lib/data/stories";
-import {
-  publishStoryAction,
-  recallStoryAction,
-  fetchMorePublishedStoriesAction,
-} from "@/lib/actions/adminStoryActions";
-import { statusBadgeVariant } from "@/lib/status";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { EmptyTableRow } from "@/components/admin/EmptyTableRow";
-import { InlineError } from "@/components/admin/InlineError";
-import { LabeledList } from "@/components/admin/LabeledList";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { PendingReviewsTable } from "@/components/admin/PendingReviewsTable";
+import { PublishedStoriesTable } from "@/components/admin/PublishedStoriesTable";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function ReviewTabs({
@@ -34,61 +17,8 @@ export function ReviewTabs({
   initialPublishedCursor: string | null;
 }) {
   const [tab, setTab] = useState<"pending" | "published">("pending");
-  const [error, setError] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-
-  // `initialPublished`는 서버 컴포넌트가 매 렌더마다 내려주는 1페이지(source of truth)다.
-  // publish/recall 후 revalidatePath("/admin/review")로 새 prop이 오면 아래에서
-  // "렌더 중 상태 조정" 패턴으로 추가 페이지 상태를 리셋해 목록이 stale해지지 않게 한다.
-  const [extraPublished, setExtraPublished] = useState<PublishedStory[]>([]);
-  const [publishedCursor, setPublishedCursor] = useState(initialPublishedCursor);
-  const [prevInitialPublished, setPrevInitialPublished] = useState(initialPublished);
-  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
-  const [isLoadingMore, startLoadMoreTransition] = useTransition();
-
-  if (prevInitialPublished !== initialPublished) {
-    setPrevInitialPublished(initialPublished);
-    setExtraPublished([]);
-    setPublishedCursor(initialPublishedCursor);
-    setLoadMoreError(null);
-  }
-
-  const published =
-    extraPublished.length > 0 ? [...initialPublished, ...extraPublished] : initialPublished;
-
-  function handlePublish(sessionId: string, target: string) {
-    setError(null);
-    startTransition(async () => {
-      const result = await publishStoryAction(sessionId, target);
-      if (result.error) setError(result.error);
-    });
-  }
-
-  function handleRecall(sessionId: string, target: string) {
-    setError(null);
-    startTransition(async () => {
-      const result = await recallStoryAction(sessionId, target);
-      if (result.error) setError(result.error);
-    });
-  }
-
-  function handleLoadMorePublished() {
-    if (!publishedCursor) return;
-    setLoadMoreError(null);
-    startLoadMoreTransition(async () => {
-      try {
-        const page = await fetchMorePublishedStoriesAction(publishedCursor);
-        if ("error" in page) {
-          setLoadMoreError(page.error);
-          return;
-        }
-        setExtraPublished((prev) => [...prev, ...page.stories]);
-        setPublishedCursor(page.nextCursor);
-      } catch (err) {
-        setLoadMoreError(err instanceof Error ? err.message : "목록을 더 불러오지 못했습니다");
-      }
-    });
-  }
+  const [pendingCount, setPendingCount] = useState(pending.length);
+  const [publishedCount, setPublishedCount] = useState(initialPublished.length);
 
   return (
     <Tabs
@@ -97,111 +27,20 @@ export function ReviewTabs({
       className="flex flex-col gap-4"
     >
       <TabsList variant="line" className="border-b border-border">
-        <TabsTrigger value="pending">대기중 ({pending.length})</TabsTrigger>
-        <TabsTrigger value="published">게시됨 ({published.length})</TabsTrigger>
+        <TabsTrigger value="pending">대기중 ({pendingCount})</TabsTrigger>
+        <TabsTrigger value="published">게시됨 ({publishedCount})</TabsTrigger>
       </TabsList>
 
-      {error && <InlineError message={error} />}
-
       <TabsContent value="pending">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>콘텐츠</TableHead>
-              <TableHead>언어 / 레벨</TableHead>
-              <TableHead>게이트</TableHead>
-              <TableHead className="text-right">작업</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {pending.map((item) => (
-              <TableRow key={`${item.sessionId}_${item.target}`}>
-                <TableCell className="whitespace-normal">
-                  <div className="font-medium">{item.title ?? "(제목 없음)"}</div>
-                  <LabeledList
-                    label="경고"
-                    items={item.ruleBaseWarnings}
-                    className="mt-1 text-xs text-amber-700 dark:text-amber-500"
-                  />
-                </TableCell>
-                <TableCell>
-                  {item.lang} / {item.level}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={statusBadgeVariant(item.gateStatus)}>{item.gateStatus}</Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={isPending}
-                    onClick={() => handlePublish(item.sessionId, item.target)}
-                  >
-                    게시
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {pending.length === 0 && (
-              <EmptyTableRow colSpan={4} message="검토 대기 중인 콘텐츠가 없습니다." />
-            )}
-          </TableBody>
-        </Table>
+        <PendingReviewsTable initialItems={pending} onCountChange={setPendingCount} />
       </TabsContent>
 
       <TabsContent value="published">
-        <div className="flex flex-col gap-3">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>콘텐츠</TableHead>
-                <TableHead>언어 / 레벨</TableHead>
-                <TableHead>챕터</TableHead>
-                <TableHead className="text-right">작업</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {published.map((story) => (
-                <TableRow key={story.id}>
-                  <TableCell className="whitespace-normal font-medium">
-                    {story.title ?? "(제목 없음)"}
-                  </TableCell>
-                  <TableCell>
-                    {story.lang} / {story.level}
-                  </TableCell>
-                  <TableCell>{story.chapterCount}개</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={isPending}
-                      onClick={() => handleRecall(story.sessionId, story.target)}
-                    >
-                      게시 철회
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {published.length === 0 && (
-                <EmptyTableRow colSpan={4} message="게시된 콘텐츠가 없습니다." />
-              )}
-            </TableBody>
-          </Table>
-          {loadMoreError && <InlineError message={loadMoreError} />}
-          {publishedCursor && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="self-start"
-              disabled={isLoadingMore}
-              onClick={handleLoadMorePublished}
-            >
-              {isLoadingMore ? "불러오는 중..." : "더 보기"}
-            </Button>
-          )}
-        </div>
+        <PublishedStoriesTable
+          initialStories={initialPublished}
+          initialCursor={initialPublishedCursor}
+          onCountChange={setPublishedCount}
+        />
       </TabsContent>
     </Tabs>
   );
