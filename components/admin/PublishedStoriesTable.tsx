@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyTableRow } from "@/components/admin/EmptyTableRow";
 import { InlineError } from "@/components/admin/InlineError";
+import { GroupCollapseToggle } from "@/components/admin/GroupCollapseToggle";
 import { cn } from "@/lib/utils";
 
 export function PublishedStoriesTable({
@@ -39,6 +40,9 @@ export function PublishedStoriesTable({
   const [isLoadingMore, startLoadMoreTransition] = useTransition();
   const [recallError, setRecallError] = useState<string | null>(null);
   const [isRecalling, startRecallTransition] = useTransition();
+  // "펼쳐진 그룹 키의 집합"으로 관리한다 — 빈 Set으로 시작하므로 모든 그룹이
+  // 기본 접힘 상태가 되고, 새로고침 후 새로 나타나는 세션도 항상 접힌 채로 시작한다.
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(new Set());
 
   if (prevInitialStories !== initialStories) {
     setPrevInitialStories(initialStories);
@@ -53,6 +57,19 @@ export function PublishedStoriesTable({
   useEffect(() => {
     onCountChange(stories.length);
   }, [stories.length, onCountChange]);
+
+  function toggleGroupExpanded(key: string) {
+    setExpandedKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  function isExpanded(key: string) {
+    return expandedKeys.has(key);
+  }
 
   function handleLoadMore() {
     if (!cursor) return;
@@ -108,43 +125,49 @@ export function PublishedStoriesTable({
                 {label && (
                   <TableRow className="bg-muted/30 hover:bg-muted/30">
                     <TableCell colSpan={4} className="font-medium">
-                      {label.title} ({label.level}) · {label.languageCount}개 언어
+                      <GroupCollapseToggle
+                        expanded={isExpanded(key)}
+                        onToggle={() => toggleGroupExpanded(key)}
+                      >
+                        {label.title} ({label.level}) · {label.languageCount}개 언어
+                      </GroupCollapseToggle>
                     </TableCell>
                   </TableRow>
                 )}
-                {items.map((story) => (
-                  <TableRow key={story.id}>
-                    <TableCell className={cn("whitespace-normal font-medium", label && "pl-6")}>
-                      <Link href={`/admin/review/${story.id}`} className="underline-offset-4 hover:underline">
-                        {story.title ?? "(제목 없음)"}
-                      </Link>
-                    </TableCell>
-                    <TableCell>
-                      {story.lang} / {story.level}
-                    </TableCell>
-                    <TableCell>{story.chapterCount}개</TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <a
-                          href={`/admin/review/${story.id}/download`}
-                          download
-                          className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
-                        >
-                          다운로드
-                        </a>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={isRecalling}
-                          onClick={() => handleRecall(story.sessionId, story.target)}
-                        >
-                          게시 철회
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {(!label || isExpanded(key)) &&
+                  items.map((story) => (
+                    <TableRow key={story.id}>
+                      <TableCell className={cn("whitespace-normal font-medium", label && "pl-6")}>
+                        <Link href={`/admin/review/${story.id}`} className="underline-offset-4 hover:underline">
+                          {story.title ?? "(제목 없음)"}
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        {story.lang} / {story.level}
+                      </TableCell>
+                      <TableCell>{story.chapterCount}개</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <a
+                            href={`/admin/review/${story.id}/download`}
+                            download
+                            className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                          >
+                            다운로드
+                          </a>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isRecalling}
+                            onClick={() => handleRecall(story.sessionId, story.target)}
+                          >
+                            게시 철회
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </Fragment>
             );
           })}
