@@ -35,6 +35,12 @@ export interface LanguagePairVolume {
   hitCount: number;
 }
 
+// word_cache 컬렉션에 wordLanguage/meaningLanguage로 필터링한 뒤 hitCount를 sum()하는
+// 집계 쿼리다. Firestore는 orderBy/range 쿼리뿐 아니라 sum()/count() 같은 집계
+// 쿼리에도 복합 색인이 필요하다 (orderBy가 없어도 마찬가지). 이 쿼리가 쓰는 색인은
+// word-bank 저장소(별도 repo)의 firestore.indexes.json에
+// word_cache: wordLanguage ASC, meaningLanguage ASC, hitCount ASC 로 정의돼 있어야 하며,
+// 해당 색인이 없거나 Building 상태면 이 함수는 FAILED_PRECONDITION으로 실패한다.
 export async function getSearchVolumeByLanguagePair(
   discovered: LanguageCacheLoad[],
 ): Promise<LanguagePairVolume[]> {
@@ -64,6 +70,11 @@ export interface TopWord {
   hitCount: number;
 }
 
+// word_cache 컬렉션에 wordLanguage/meaningLanguage로 필터링한 뒤 hitCount로 orderBy하는
+// 쿼리다. 이 쿼리가 쓰는 색인은 위 getSearchVolumeByLanguagePair와는 별개로,
+// word-bank 저장소(별도 repo)의 firestore.indexes.json에
+// word_cache: wordLanguage ASC, meaningLanguage ASC, hitCount DESC 로 정의돼 있어야 하며,
+// 해당 색인이 없거나 Building 상태면 이 함수는 FAILED_PRECONDITION으로 실패한다.
 export async function getTopWordsForPair(
   wordLanguage: string,
   meaningLanguage: string,

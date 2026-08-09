@@ -1,7 +1,21 @@
 import type { SearchFailureRate } from "@/lib/data/wordCacheStats";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-export function SearchFailureRateTable({ rates }: { rates: SearchFailureRate[] }) {
+export function SearchFailureRateTable({
+  rates,
+  volumesAvailable,
+}: {
+  rates: SearchFailureRate[];
+  volumesAvailable: boolean;
+}) {
+  if (!volumesAvailable) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        검색량 데이터를 불러오지 못해 무의미 검색 비율을 계산할 수 없습니다.
+      </p>
+    );
+  }
+
   if (rates.length === 0) {
     return <p className="text-sm text-muted-foreground">무의미 검색 데이터가 없습니다.</p>;
   }

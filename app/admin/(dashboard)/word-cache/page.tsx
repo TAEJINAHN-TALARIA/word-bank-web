@@ -17,13 +17,37 @@ import { Card, CardContent } from "@/components/ui/card";
 const INSTRUMENTATION_START_DATE = "2026-08-08";
 
 export default async function WordCacheStatsPage() {
-  const cacheLoad = await getCacheLoadByLanguage().catch(() => []);
-  const volumes = await getSearchVolumeByLanguagePair(cacheLoad).catch(() => []);
+  const cacheLoad = await getCacheLoadByLanguage().catch((error) => {
+    console.error("[word-cache] getCacheLoadByLanguage failed", error);
+    return [];
+  });
+
+  // volumes 조회 실패는 null로 구분해서 남긴다. []로 뭉개버리면 아래
+  // getSearchFailureRates가 "검색량 0"으로 오인해 모든 언어쌍의 무의미 비율을
+  // 100%로 잘못 계산해버리기 때문 (실패와 "데이터 없음"은 다른 상태).
+  const volumes = await getSearchVolumeByLanguagePair(cacheLoad).catch((error) => {
+    console.error("[word-cache] getSearchVolumeByLanguagePair failed", error);
+    return null;
+  });
+  const volumesAvailable = volumes !== null;
+  const safeVolumes = volumes ?? [];
+
   const [failureRates, localeDistribution, initialTopWords] = await Promise.all([
-    getSearchFailureRates(volumes).catch(() => []),
-    getLocaleDistribution().catch(() => []),
-    volumes.length > 0
-      ? getTopWordsForPair(volumes[0].wordLanguage, volumes[0].meaningLanguage).catch(() => [])
+    volumesAvailable
+      ? getSearchFailureRates(safeVolumes).catch((error) => {
+          console.error("[word-cache] getSearchFailureRates failed", error);
+          return [];
+        })
+      : Promise.resolve([]),
+    getLocaleDistribution().catch((error) => {
+      console.error("[word-cache] getLocaleDistribution failed", error);
+      return [];
+    }),
+    safeVolumes.length > 0
+      ? getTopWordsForPair(safeVolumes[0].wordLanguage, safeVolumes[0].meaningLanguage).catch((error) => {
+          console.error("[word-cache] getTopWordsForPair failed", error);
+          return [];
+        })
       : Promise.resolve([]),
   ]);
 
@@ -41,7 +65,7 @@ export default async function WordCacheStatsPage() {
         <h2 className="text-lg font-semibold">언어쌍별 검색량 랭킹</h2>
         <Card>
           <CardContent>
-            <WordCacheVolumeTable volumes={volumes} />
+            <WordCacheVolumeTable volumes={safeVolumes} />
           </CardContent>
         </Card>
       </section>
@@ -50,7 +74,7 @@ export default async function WordCacheStatsPage() {
         <h2 className="text-lg font-semibold">언어쌍별 인기 단어</h2>
         <Card>
           <CardContent>
-            <TopWordsPanel pairs={volumes} initialWords={initialTopWords} />
+            <TopWordsPanel pairs={safeVolumes} initialWords={initialTopWords} />
           </CardContent>
         </Card>
       </section>
@@ -68,7 +92,7 @@ export default async function WordCacheStatsPage() {
         <h2 className="text-lg font-semibold">무의미 검색 비율</h2>
         <Card>
           <CardContent>
-            <SearchFailureRateTable rates={failureRates} />
+            <SearchFailureRateTable rates={failureRates} volumesAvailable={volumesAvailable} />
           </CardContent>
         </Card>
       </section>
