@@ -11,11 +11,29 @@ export type PublishedStory = {
   target: string;
 };
 
-export async function listPublishedStories(): Promise<PublishedStory[]> {
-  const db = getAdminFirestore();
-  const snapshot = await db.collection("stories").orderBy("createdAt", "desc").limit(100).get();
+const PUBLISHED_STORIES_PAGE_SIZE = 100;
 
-  return snapshot.docs.map((doc) => {
+export type PublishedStoriesPage = {
+  stories: PublishedStory[];
+  nextCursor: string | null;
+};
+
+export async function listPublishedStories(cursorId?: string): Promise<PublishedStoriesPage> {
+  const db = getAdminFirestore();
+  let query = db
+    .collection("stories")
+    .orderBy("createdAt", "desc")
+    .limit(PUBLISHED_STORIES_PAGE_SIZE);
+
+  if (cursorId) {
+    const cursorDoc = await db.collection("stories").doc(cursorId).get();
+    if (cursorDoc.exists) {
+      query = query.startAfter(cursorDoc);
+    }
+  }
+
+  const snapshot = await query.get();
+  const stories = snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
       id: doc.id,
@@ -27,4 +45,12 @@ export async function listPublishedStories(): Promise<PublishedStory[]> {
       target: data.target,
     };
   });
+
+  return {
+    stories,
+    nextCursor:
+      snapshot.docs.length === PUBLISHED_STORIES_PAGE_SIZE
+        ? snapshot.docs[snapshot.docs.length - 1].id
+        : null,
+  };
 }

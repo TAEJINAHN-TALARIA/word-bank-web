@@ -3,7 +3,7 @@ import { listPublishedStories } from "@/lib/data/stories";
 import { ReviewTabs } from "@/components/admin/ReviewTabs";
 
 export default async function ReviewPage() {
-  const [pending, published] = await Promise.all([
+  const [pending, publishedPage] = await Promise.all([
     fetchPendingReviews(),
     listPublishedStories(),
   ]);
@@ -11,7 +11,11 @@ export default async function ReviewPage() {
   return (
     <div>
       <h1 className="mb-4 text-lg font-semibold">소설 검토 / 게시 관리</h1>
-      <ReviewTabs pending={pending} published={published} />
+      <ReviewTabs
+        pending={pending}
+        initialPublished={publishedPage.stories}
+        initialPublishedCursor={publishedPage.nextCursor}
+      />
     </div>
   );
 }

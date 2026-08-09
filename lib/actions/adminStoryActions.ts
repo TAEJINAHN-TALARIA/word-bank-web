@@ -6,6 +6,7 @@ import {
   publishStory as callPublishStory,
   recallStory as callRecallStory,
 } from "@/lib/admin-functions/storyGenerator";
+import { listPublishedStories, type PublishedStoriesPage } from "@/lib/data/stories";
 
 export async function publishStoryAction(
   sessionId: string,
@@ -21,6 +22,15 @@ export async function publishStoryAction(
   }
   revalidatePath("/admin/review");
   return {};
+}
+
+export async function fetchMorePublishedStoriesAction(
+  cursorId: string,
+): Promise<PublishedStoriesPage> {
+  const session = await getAdminSession();
+  if (!session) throw new Error("관리자 로그인이 필요합니다");
+
+  return listPublishedStories(cursorId);
 }
 
 export async function recallStoryAction(
