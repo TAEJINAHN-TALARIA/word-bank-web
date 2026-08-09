@@ -31,7 +31,11 @@ export function PendingReviewsTable({
   initialItems: PendingReviewItem[];
   onCountChange: (count: number) => void;
 }) {
-  const [items, setItems] = useState(initialItems);
+  // `initialItems`는 서버 컴포넌트가 매 렌더마다 내려주는 목록(source of truth)이다.
+  // publish 후 revalidatePath("/admin/review")로 새 prop이 오면 아래에서
+  // "렌더 중 상태 조정" 패턴으로 removedKeys 오버레이를 리셋해 목록이 stale해지지 않게 한다.
+  const [removedKeys, setRemovedKeys] = useState<Set<string>>(new Set());
+  const [prevInitialItems, setPrevInitialItems] = useState(initialItems);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isPending, startTransition] = useTransition();
   const [singleError, setSingleError] = useState<string | null>(null);
@@ -39,6 +43,13 @@ export function PendingReviewsTable({
     successCount: number;
     failures: { sessionId: string; target: string; error: string }[];
   } | null>(null);
+
+  if (prevInitialItems !== initialItems) {
+    setPrevInitialItems(initialItems);
+    setRemovedKeys(new Set());
+  }
+
+  const items = initialItems.filter((i) => !removedKeys.has(itemKey(i)));
 
   useEffect(() => {
     onCountChange(items.length);
@@ -56,12 +67,23 @@ export function PendingReviewsTable({
   function handlePublish(sessionId: string, target: string) {
     setSingleError(null);
     startTransition(async () => {
-      const result = await publishStoryAction(sessionId, target);
-      if (result.error) {
-        setSingleError(result.error);
-        return;
+      try {
+        const result = await publishStoryAction(sessionId, target);
+        if (result.error) {
+          setSingleError(result.error);
+          return;
+        }
+        const key = itemKey({ sessionId, target });
+        setRemovedKeys((prev) => new Set(prev).add(key));
+        setSelected((prev) => {
+          if (!prev.has(key)) return prev;
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      } catch (err) {
+        setSingleError(err instanceof Error ? err.message : "게시 실패");
       }
-      setItems((prev) => prev.filter((i) => !(i.sessionId === sessionId && i.target === target)));
     });
   }
 
@@ -69,18 +91,32 @@ export function PendingReviewsTable({
     if (targets.length === 0) return;
     setBulkResult(null);
     startTransition(async () => {
-      const results = await publishStoriesAction(targets);
-      const failures = results.filter(
-        (r): r is { sessionId: string; target: string; error: string } => Boolean(r.error),
-      );
-      const succeededKeys = new Set(results.filter((r) => !r.error).map((r) => itemKey(r)));
-      setItems((prev) => prev.filter((i) => !succeededKeys.has(itemKey(i))));
-      setSelected((prev) => {
-        const next = new Set(prev);
-        succeededKeys.forEach((k) => next.delete(k));
-        return next;
-      });
-      setBulkResult({ successCount: results.length - failures.length, failures });
+      try {
+        const results = await publishStoriesAction(targets);
+        const failures = results.filter(
+          (r): r is { sessionId: string; target: string; error: string } => Boolean(r.error),
+        );
+        const succeededKeys = new Set(results.filter((r) => !r.error).map((r) => itemKey(r)));
+        setRemovedKeys((prev) => {
+          const next = new Set(prev);
+          succeededKeys.forEach((k) => next.add(k));
+          return next;
+        });
+        setSelected((prev) => {
+          const next = new Set(prev);
+          succeededKeys.forEach((k) => next.delete(k));
+          return next;
+        });
+        setBulkResult({ successCount: results.length - failures.length, failures });
+      } catch (err) {
+        setBulkResult({
+          successCount: 0,
+          failures: targets.map((t) => ({
+            ...t,
+            error: err instanceof Error ? err.message : "일괄 게시 실패",
+          })),
+        });
+      }
     });
   }
 

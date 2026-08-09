@@ -27,12 +27,28 @@ export function PublishedStoriesTable({
   initialCursor: string | null;
   onCountChange: (count: number) => void;
 }) {
-  const [stories, setStories] = useState(initialStories);
+  // `initialStories`는 서버 컴포넌트가 매 렌더마다 내려주는 1페이지(source of truth)다.
+  // publish/recall 후 revalidatePath("/admin/review")로 새 prop이 오면 아래에서
+  // "렌더 중 상태 조정" 패턴으로 로컬 오버레이(removedKeys/extraPages)를 리셋해
+  // 목록이 stale해지지 않게 한다.
+  const [removedKeys, setRemovedKeys] = useState<Set<string>>(new Set());
+  const [extraPages, setExtraPages] = useState<PublishedStory[]>([]);
   const [cursor, setCursor] = useState(initialCursor);
+  const [prevInitialStories, setPrevInitialStories] = useState(initialStories);
   const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
   const [isLoadingMore, startLoadMoreTransition] = useTransition();
   const [recallError, setRecallError] = useState<string | null>(null);
   const [isRecalling, startRecallTransition] = useTransition();
+
+  if (prevInitialStories !== initialStories) {
+    setPrevInitialStories(initialStories);
+    setRemovedKeys(new Set());
+    setExtraPages([]);
+    setCursor(initialCursor);
+    setLoadMoreError(null);
+  }
+
+  const stories = [...initialStories, ...extraPages].filter((s) => !removedKeys.has(s.id));
 
   useEffect(() => {
     onCountChange(stories.length);
@@ -48,7 +64,7 @@ export function PublishedStoriesTable({
           setLoadMoreError(page.error);
           return;
         }
-        setStories((prev) => [...prev, ...page.stories]);
+        setExtraPages((prev) => [...prev, ...page.stories]);
         setCursor(page.nextCursor);
       } catch (err) {
         setLoadMoreError(err instanceof Error ? err.message : "목록을 더 불러오지 못했습니다");
@@ -64,7 +80,10 @@ export function PublishedStoriesTable({
         setRecallError(result.error);
         return;
       }
-      setStories((prev) => prev.filter((s) => !(s.sessionId === sessionId && s.target === target)));
+      const recalled = stories.find((s) => s.sessionId === sessionId && s.target === target);
+      if (recalled) {
+        setRemovedKeys((prev) => new Set(prev).add(recalled.id));
+      }
     });
   }
 
