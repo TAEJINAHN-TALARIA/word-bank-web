@@ -1938,7 +1938,7 @@ git commit -m "feat: add expression edit panel with per-language tabs"
 - Consumes: `Expression`, `ExpressionsPage` (Task 7), `fetchMoreExpressionsAction`/`deleteExpressionAction` (Task 9), `ExpressionEditPanel` (Task 11)
 - Produces: `ExpressionsTable` — props `{ language: string; initialPage: ExpressionsPage }`
 
-이 컴포넌트는 목록·검색·삭제뿐 아니라 "수정" 패널의 표시 여부와 저장 결과 반영까지 스스로 책임진다(부모인 `ExpressionPoolManager`는 언어 전환 시에만 `initialPage`를 새로 내려주고, 개별 항목 수정 결과는 알 필요가 없다) — 그래야 언어 전환용 리셋 `useEffect`가 항목 수정 때마다 오발동해 "더 보기"로 불러온 추가 페이지가 날아가는 문제를 피할 수 있다.
+이 컴포넌트는 목록·검색·삭제뿐 아니라 "수정" 패널의 표시 여부와 저장 결과 반영까지 스스로 책임진다(부모인 `ExpressionPoolManager`는 언어 전환 시에만 `initialPage`를 새로 내려주고, 개별 항목 수정 결과는 알 필요가 없다) — 그래야 언어 전환용 리셋 로직이 항목 수정 때마다 오발동해 "더 보기"로 불러온 추가 페이지가 날아가는 문제를 피할 수 있다.
 
 - [ ] **Step 1: 구현**
 
@@ -1946,7 +1946,7 @@ git commit -m "feat: add expression edit panel with per-language tabs"
 ```tsx
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { Expression, ExpressionsPage } from "@/lib/data/expressions";
 import { fetchMoreExpressionsAction, deleteExpressionAction } from "@/lib/actions/expressionActions";
 import { Button } from "@/components/ui/button";
@@ -1968,17 +1968,22 @@ export function ExpressionsTable({
   const [editing, setEditing] = useState<Expression | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [prevInitialPage, setPrevInitialPage] = useState(initialPage);
 
-  // 언어를 바꾸면 부모가 새 initialPage를 내려준다 — 로컬 상태를 그 언어 기준으로 리셋한다.
+  // 언어를 바꾸면 부모가 새 initialPage를 내려준다 — 렌더 중 상태 조정으로 로컬 상태를 그 언어
+  // 기준으로 리셋한다(PublishedStoriesTable.tsx와 동일한 패턴 — useEffect가 아니라 렌더 본문에서
+  // 직접 setState하는 이유는 CLAUDE.md에 문서화된 이 코드베이스의 관례이자, react-hooks의
+  // set-state-in-effect 린트 규칙이 정확히 이 이유로 금지하는 패턴이기 때문이다).
   // 항목 수정/삭제는 이 컴포넌트 내부 상태만 바꾸고 initialPage를 건드리지 않으므로,
-  // 이 effect는 진짜 언어 전환 때만 발동한다(수정 저장 후 재실행되지 않음).
-  useEffect(() => {
+  // 이 조정은 진짜 언어 전환 때만 발동한다(수정 저장 후 재실행되지 않음).
+  if (prevInitialPage !== initialPage) {
+    setPrevInitialPage(initialPage);
     setItems(initialPage.items);
     setCursor(initialPage.nextCursor);
     setSearch("");
     setEditing(null);
     setError(null);
-  }, [language, initialPage]);
+  }
 
   function handleLoadMore() {
     if (!cursor) return;
