@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { Expression, ExpressionsPage } from "@/lib/data/expressions";
 import { fetchMoreExpressionsAction, deleteExpressionAction } from "@/lib/actions/expressionActions";
 import { Button } from "@/components/ui/button";
@@ -22,17 +22,19 @@ export function ExpressionsTable({
   const [editing, setEditing] = useState<Expression | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [prevInitialPage, setPrevInitialPage] = useState(initialPage);
 
-  // 언어를 바꾸면 부모가 새 initialPage를 내려준다 — 로컬 상태를 그 언어 기준으로 리셋한다.
-  // 항목 수정/삭제는 이 컴포넌트 내부 상태만 바꾸고 initialPage를 건드리지 않으므로,
-  // 이 effect는 진짜 언어 전환 때만 발동한다(수정 저장 후 재실행되지 않음).
-  useEffect(() => {
+  // 언어를 바꾸면 부모가 새 initialPage를 내려준다 — 렌더 중 상태 조정으로 로컬 상태를 그 언어
+  // 기준으로 리셋한다(PublishedStoriesTable.tsx와 동일한 패턴). 항목 수정/삭제는 이 컴포넌트
+  // 내부 상태만 바꾸고 initialPage를 건드리지 않으므로, 이 조정은 진짜 언어 전환 때만 발동한다.
+  if (prevInitialPage !== initialPage) {
+    setPrevInitialPage(initialPage);
     setItems(initialPage.items);
     setCursor(initialPage.nextCursor);
     setSearch("");
     setEditing(null);
     setError(null);
-  }, [language, initialPage]);
+  }
 
   function handleLoadMore() {
     if (!cursor) return;
