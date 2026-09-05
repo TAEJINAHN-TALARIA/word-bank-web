@@ -9,7 +9,7 @@ export default async function ExpressionPoolPage() {
   const [configs, initialExpressionsPage, initialJobs] = await Promise.all([
     listExpressionPoolConfigs(languages),
     listExpressions(DEFAULT_LANGUAGE),
-    listExpressionBatchJobs(),
+    listExpressionBatchJobs(DEFAULT_LANGUAGE),
   ]);
 
   return (

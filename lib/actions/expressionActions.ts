@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { getAdminSession } from "@/lib/auth/session";
 import { getAdminFirestore } from "@/lib/firebase/admin";
 import { submitExpressionBatch } from "@/lib/admin-functions/expressionPool";
-import { listExpressions, type Expression, type ExpressionsPage } from "@/lib/data/expressions";
+import {
+  listExpressions,
+  listExpressionBatchJobs,
+  type Expression,
+  type ExpressionsPage,
+  type ExpressionBatchJob,
+} from "@/lib/data/expressions";
 
 const UPDATE_ALLOWED_KEYS = ["text", "register", "meanings", "similarExpressions"] as const;
 type ExpressionUpdate = Partial<Pick<Expression, "text" | "register" | "meanings" | "similarExpressions">>;
@@ -96,4 +102,13 @@ export async function fetchMoreExpressionsAction(
   if (!session) return { error: "관리자 로그인이 필요합니다" };
 
   return listExpressions(language, cursor);
+}
+
+export async function fetchExpressionBatchJobsAction(
+  language: string,
+): Promise<ExpressionBatchJob[] | { error: string }> {
+  const session = await getAdminSession();
+  if (!session) return { error: "관리자 로그인이 필요합니다" };
+
+  return listExpressionBatchJobs(language);
 }

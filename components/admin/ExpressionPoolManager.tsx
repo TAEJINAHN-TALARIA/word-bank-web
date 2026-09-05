@@ -3,7 +3,12 @@
 import { useState, useTransition } from "react";
 import type { ExpressionPoolConfigRow, ExpressionsPage, ExpressionBatchJob } from "@/lib/data/expressions";
 import { LANG_NAMES } from "@/lib/constants/languages";
-import { fetchMoreExpressionsAction, updateExpressionPoolConfigAction, submitExpressionBatchAction } from "@/lib/actions/expressionActions";
+import {
+  fetchMoreExpressionsAction,
+  fetchExpressionBatchJobsAction,
+  updateExpressionPoolConfigAction,
+  submitExpressionBatchAction,
+} from "@/lib/actions/expressionActions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { InlineError } from "@/components/admin/InlineError";
@@ -23,7 +28,7 @@ export function ExpressionPoolManager({
 }) {
   const [language, setLanguage] = useState(initialLanguage);
   const [expressionsPage, setExpressionsPage] = useState(initialExpressionsPage);
-  const [jobs] = useState(initialJobs);
+  const [jobs, setJobs] = useState(initialJobs);
   const [targetSizeInput, setTargetSizeInput] = useState(
     String(configs.find((c) => c.language === initialLanguage)?.targetSize ?? 0),
   );
@@ -39,13 +44,24 @@ export function ExpressionPoolManager({
     setTargetSizeInput(String(configs.find((c) => c.language === next)?.targetSize ?? 0));
     setError(null);
     setNotice(null);
+    setExpressionsPage({ items: [], nextCursor: null });
+    setJobs([]);
     startTransition(async () => {
-      const page = await fetchMoreExpressionsAction(next, "");
+      const [page, jobsResult] = await Promise.all([
+        fetchMoreExpressionsAction(next, ""),
+        fetchExpressionBatchJobsAction(next),
+      ]);
       if ("error" in page) {
         setError(page.error);
         return;
       }
       setExpressionsPage(page);
+
+      if ("error" in jobsResult) {
+        setError(jobsResult.error);
+        return;
+      }
+      setJobs(jobsResult);
     });
   }
 
@@ -73,6 +89,12 @@ export function ExpressionPoolManager({
         return;
       }
       setNotice(`생성 작업을 제출했습니다 (jobId: ${result.jobId}). 완료되면 자동으로 풀에 반영됩니다.`);
+
+      const jobsResult = await fetchExpressionBatchJobsAction(language);
+      if ("error" in jobsResult) {
+        return;
+      }
+      setJobs(jobsResult);
     });
   }
 
@@ -146,7 +168,7 @@ export function ExpressionPoolManager({
         <h2 className="text-lg font-semibold">생성 작업 현황</h2>
         <Card>
           <CardContent>
-            <ExpressionBatchJobsTable jobs={jobs.filter((j) => j.language === language)} />
+            <ExpressionBatchJobsTable jobs={jobs} />
           </CardContent>
         </Card>
       </div>

@@ -6,7 +6,7 @@ vi.mock('@/lib/firebase/admin');
 vi.mock('@/lib/auth/session');
 vi.mock('next/cache');
 vi.mock('@/lib/admin-functions/expressionPool');
-vi.mock('@/lib/data/expressions', () => ({ listExpressions: vi.fn() }));
+vi.mock('@/lib/data/expressions', () => ({ listExpressions: vi.fn(), listExpressionBatchJobs: vi.fn() }));
 
 import {
   updateExpressionAction,
@@ -14,6 +14,7 @@ import {
   updateExpressionPoolConfigAction,
   submitExpressionBatchAction,
   fetchMoreExpressionsAction,
+  fetchExpressionBatchJobsAction,
 } from './expressionActions';
 import * as adminModule from '@/lib/firebase/admin';
 import * as sessionModule from '@/lib/auth/session';
@@ -26,6 +27,7 @@ const mockGetAdminSession = vi.mocked(sessionModule.getAdminSession);
 const mockRevalidatePath = vi.mocked(cacheModule.revalidatePath);
 const mockSubmitExpressionBatch = vi.mocked(expressionPoolModule.submitExpressionBatch);
 const mockListExpressions = vi.mocked(expressionsDataModule.listExpressions);
+const mockListExpressionBatchJobs = vi.mocked(expressionsDataModule.listExpressionBatchJobs);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -144,5 +146,25 @@ describe('fetchMoreExpressionsAction', () => {
 
     expect(mockListExpressions).toHaveBeenCalledWith('en', 'cursor1');
     expect(result).toEqual({ items: [], nextCursor: null });
+  });
+});
+
+describe('fetchExpressionBatchJobsAction', () => {
+  it('관리자 세션이 없으면 에러를 반환하고 listExpressionBatchJobs를 호출하지 않는다', async () => {
+    mockGetAdminSession.mockResolvedValueOnce(null);
+
+    const result = await fetchExpressionBatchJobsAction('en');
+
+    expect(result).toEqual({ error: '관리자 로그인이 필요합니다' });
+    expect(mockListExpressionBatchJobs).not.toHaveBeenCalled();
+  });
+
+  it('listExpressionBatchJobs에 위임한다', async () => {
+    mockListExpressionBatchJobs.mockResolvedValueOnce([]);
+
+    const result = await fetchExpressionBatchJobsAction('en');
+
+    expect(mockListExpressionBatchJobs).toHaveBeenCalledWith('en');
+    expect(result).toEqual([]);
   });
 });
