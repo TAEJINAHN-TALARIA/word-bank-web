@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+vi.mock('server-only', () => ({}));
+
 describe('submitExpressionBatch', () => {
   const originalFetch = global.fetch;
   const originalEnv = { ...process.env };
