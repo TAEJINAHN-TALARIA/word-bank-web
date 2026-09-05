@@ -88,6 +88,12 @@ export async function submitExpressionBatchAction(
   }
 }
 
-export async function fetchMoreExpressionsAction(language: string, cursor: string): Promise<ExpressionsPage> {
+export async function fetchMoreExpressionsAction(
+  language: string,
+  cursor: string,
+): Promise<ExpressionsPage | { error: string }> {
+  const session = await getAdminSession();
+  if (!session) return { error: "관리자 로그인이 필요합니다" };
+
   return listExpressions(language, cursor);
 }

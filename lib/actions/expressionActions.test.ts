@@ -128,6 +128,15 @@ describe('submitExpressionBatchAction', () => {
 });
 
 describe('fetchMoreExpressionsAction', () => {
+  it('관리자 세션이 없으면 에러를 반환하고 listExpressions를 호출하지 않는다', async () => {
+    mockGetAdminSession.mockResolvedValueOnce(null);
+
+    const result = await fetchMoreExpressionsAction('en', 'cursor1');
+
+    expect(result).toEqual({ error: '관리자 로그인이 필요합니다' });
+    expect(mockListExpressions).not.toHaveBeenCalled();
+  });
+
   it('listExpressions에 위임한다', async () => {
     mockListExpressions.mockResolvedValueOnce({ items: [], nextCursor: null });
 
