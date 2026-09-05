@@ -1512,6 +1512,15 @@ describe('submitExpressionBatchAction', () => {
 });
 
 describe('fetchMoreExpressionsAction', () => {
+  it('관리자 세션이 없으면 에러를 반환하고 listExpressions를 호출하지 않는다', async () => {
+    mockGetAdminSession.mockResolvedValueOnce(null);
+
+    const result = await fetchMoreExpressionsAction('en', 'cursor1');
+
+    expect(result).toEqual({ error: '관리자 로그인이 필요합니다' });
+    expect(mockListExpressions).not.toHaveBeenCalled();
+  });
+
   it('listExpressions에 위임한다', async () => {
     mockListExpressions.mockResolvedValueOnce({ items: [], nextCursor: null });
 
@@ -1622,10 +1631,18 @@ export async function submitExpressionBatchAction(
   }
 }
 
-export async function fetchMoreExpressionsAction(language: string, cursor: string): Promise<ExpressionsPage> {
+export async function fetchMoreExpressionsAction(
+  language: string,
+  cursor: string,
+): Promise<ExpressionsPage | { error: string }> {
+  const session = await getAdminSession();
+  if (!session) return { error: "관리자 로그인이 필요합니다" };
+
   return listExpressions(language, cursor);
 }
 ```
+
+`fetchMoreExpressionsAction`도 다른 액션들과 동일하게 `getAdminSession()`을 재확인한다 — Server Action은 `(dashboard)` 레이아웃의 인증 게이트를 우회해 직접 호출될 수 있으므로, 표현 목록처럼 관리자 전용 데이터를 반환하는 조회 액션도 예외가 아니다(`lib/actions/adminStoryActions.ts`의 `fetchMorePublishedStoriesAction`과 동일한 `FetchMorePublishedStoriesResult`류 패턴 — 성공 시 `ExpressionsPage`, 실패 시 `{error}`).
 
 - [ ] **Step 4: 테스트 실행해 통과 확인**
 
@@ -1969,6 +1986,10 @@ export function ExpressionsTable({
     startTransition(async () => {
       try {
         const page = await fetchMoreExpressionsAction(language, cursor);
+        if ("error" in page) {
+          setError(page.error);
+          return;
+        }
         setItems((prev) => [...prev, ...page.items]);
         setCursor(page.nextCursor);
       } catch (err) {
@@ -2205,6 +2226,10 @@ export function ExpressionPoolManager({
     setNotice(null);
     startTransition(async () => {
       const page = await fetchMoreExpressionsAction(next, "");
+      if ("error" in page) {
+        setError(page.error);
+        return;
+      }
       setExpressionsPage(page);
     });
   }
