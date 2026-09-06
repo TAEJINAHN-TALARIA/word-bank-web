@@ -15,6 +15,7 @@ import {
   submitExpressionBatchAction,
   fetchMoreExpressionsAction,
   fetchExpressionBatchJobsAction,
+  submitExpressionSeedCampaignAction,
 } from './expressionActions';
 import * as adminModule from '@/lib/firebase/admin';
 import * as sessionModule from '@/lib/auth/session';
@@ -26,6 +27,7 @@ const mockGetAdminFirestore = vi.mocked(adminModule.getAdminFirestore);
 const mockGetAdminSession = vi.mocked(sessionModule.getAdminSession);
 const mockRevalidatePath = vi.mocked(cacheModule.revalidatePath);
 const mockSubmitExpressionBatch = vi.mocked(expressionPoolModule.submitExpressionBatch);
+const mockSubmitExpressionSeedCampaign = vi.mocked(expressionPoolModule.submitExpressionSeedCampaign);
 const mockListExpressions = vi.mocked(expressionsDataModule.listExpressions);
 const mockListExpressionBatchJobs = vi.mocked(expressionsDataModule.listExpressionBatchJobs);
 
@@ -166,5 +168,34 @@ describe('fetchExpressionBatchJobsAction', () => {
 
     expect(mockListExpressionBatchJobs).toHaveBeenCalledWith('en');
     expect(result).toEqual([]);
+  });
+});
+
+describe('submitExpressionSeedCampaignAction', () => {
+  it('성공하면 jobId/campaignId를 반환하고 페이지를 재검증한다', async () => {
+    mockSubmitExpressionSeedCampaign.mockResolvedValueOnce({ jobId: 'job1', campaignId: 'job1' });
+
+    const result = await submitExpressionSeedCampaignAction('en', 366);
+
+    expect(mockSubmitExpressionSeedCampaign).toHaveBeenCalledWith('en', 366);
+    expect(mockRevalidatePath).toHaveBeenCalledWith('/admin/expressions');
+    expect(result).toEqual({ jobId: 'job1', campaignId: 'job1' });
+  });
+
+  it('실패하면 에러 메시지를 반환한다', async () => {
+    mockSubmitExpressionSeedCampaign.mockRejectedValueOnce(new Error('시딩 캠페인 요청 실패'));
+
+    const result = await submitExpressionSeedCampaignAction('en', 366);
+
+    expect(result).toEqual({ error: '시딩 캠페인 요청 실패' });
+  });
+
+  it('관리자 세션이 없으면 에러를 반환한다', async () => {
+    mockGetAdminSession.mockResolvedValueOnce(null);
+
+    const result = await submitExpressionSeedCampaignAction('en', 366);
+
+    expect(result).toEqual({ error: '관리자 로그인이 필요합니다' });
+    expect(mockSubmitExpressionSeedCampaign).not.toHaveBeenCalled();
   });
 });

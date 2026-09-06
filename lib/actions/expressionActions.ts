@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { getAdminSession } from "@/lib/auth/session";
 import { getAdminFirestore } from "@/lib/firebase/admin";
-import { submitExpressionBatch } from "@/lib/admin-functions/expressionPool";
+import { submitExpressionBatch, submitExpressionSeedCampaign } from "@/lib/admin-functions/expressionPool";
 import {
   listExpressions,
   listExpressionBatchJobs,
@@ -111,4 +111,20 @@ export async function fetchExpressionBatchJobsAction(
   if (!session) return { error: "관리자 로그인이 필요합니다" };
 
   return listExpressionBatchJobs(language);
+}
+
+export async function submitExpressionSeedCampaignAction(
+  language: string,
+  count: number,
+): Promise<{ jobId?: string; campaignId?: string; error?: string }> {
+  const session = await getAdminSession();
+  if (!session) return { error: "관리자 로그인이 필요합니다" };
+
+  try {
+    const result = await submitExpressionSeedCampaign(language, count);
+    revalidatePath("/admin/expressions");
+    return result;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "시딩 캠페인 요청 실패" };
+  }
 }
