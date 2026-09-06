@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { ExpressionPoolConfigRow, ExpressionsPage, ExpressionBatchJob } from "@/lib/data/expressions";
-import { LANG_NAMES } from "@/lib/constants/languages";
+import { LANG_NAMES, MEANING_LANGUAGE_CODES } from "@/lib/constants/languages";
 import {
   fetchMoreExpressionsAction,
   fetchExpressionBatchJobsAction,
@@ -102,6 +102,13 @@ export function ExpressionPoolManager({
 
   function handleSubmitSeedCampaign() {
     const count = Number(seedCount);
+    const languageName = LANG_NAMES[language] ?? language;
+    const confirmed = window.confirm(
+      `${languageName}(${count}개) 시딩 캠페인을 시작할까요? 텍스트 생성 후 ${MEANING_LANGUAGE_CODES.length}개 언어 번역 작업이 자동으로 이어집니다.`,
+    );
+    if (!confirmed) {
+      return;
+    }
     setError(null);
     setNotice(null);
     startTransition(async () => {
@@ -111,7 +118,7 @@ export function ExpressionPoolManager({
         return;
       }
       setNotice(
-        `시딩 캠페인을 시작했습니다 (campaignId: ${result.campaignId}). 텍스트 생성이 끝나면 14개 언어 번역이 자동으로 이어집니다.`,
+        `${languageName} 시딩 캠페인을 시작했습니다 (campaignId: ${result.campaignId}). 텍스트 생성이 끝나면 ${MEANING_LANGUAGE_CODES.length}개 언어 번역이 자동으로 이어집니다.`,
       );
 
       const jobsResult = await fetchExpressionBatchJobsAction(language);
@@ -189,9 +196,10 @@ export function ExpressionPoolManager({
       </Card>
 
       <div className="flex flex-col gap-3">
-        <h2 className="text-lg font-semibold">초기 시딩 캠페인</h2>
+        <h2 className="text-lg font-semibold">초기 시딩 캠페인 ({LANG_NAMES[language] ?? language})</h2>
         <p className="text-sm text-muted-foreground">
-          큰 목표치를 며칠 안에 채웁니다 — 표현 텍스트를 먼저 생성하고, 14개 언어 번역이 자동으로 이어집니다.
+          큰 목표치를 며칠 안에 채웁니다 — 표현 텍스트를 먼저 생성하고, {MEANING_LANGUAGE_CODES.length}개 언어 번역이
+          자동으로 이어집니다.
         </p>
         <Card>
           <CardContent>
@@ -211,6 +219,8 @@ export function ExpressionPoolManager({
                 시딩 시작
               </Button>
             </div>
+            {error && <InlineError message={error} />}
+            {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
           </CardContent>
         </Card>
       </div>

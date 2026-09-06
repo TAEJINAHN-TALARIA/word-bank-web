@@ -48,7 +48,7 @@ export function ExpressionBatchJobsTable({ jobs }: { jobs: ExpressionBatchJob[] 
             <TableCell>{job.language}</TableCell>
             <TableCell>{job.count}개</TableCell>
             <TableCell>{job.requestedBy === "auto" ? "자동" : "수동"}</TableCell>
-            <TableCell>{job.phase ? PHASE_LABEL[job.phase] : "-"}</TableCell>
+            <TableCell>{job.phase ? (PHASE_LABEL[job.phase] ?? job.phase) : "-"}</TableCell>
             <TableCell>{job.meaningLanguage ? (LANG_NAMES[job.meaningLanguage] ?? job.meaningLanguage) : "-"}</TableCell>
             <TableCell className="text-muted-foreground">{new Date(job.createdAt).toLocaleString("ko-KR")}</TableCell>
             <TableCell className="text-muted-foreground">
