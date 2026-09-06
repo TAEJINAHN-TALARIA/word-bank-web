@@ -27,6 +27,9 @@ export type ExpressionBatchJob = {
   count: number;
   status: "pending" | "running" | "succeeded" | "failed";
   requestedBy: "auto" | "manual";
+  phase: "text" | "translate" | null;
+  meaningLanguage: string | null;
+  campaignId: string | null;
   createdAt: string;
   completedAt: string | null;
   error: string | null;
@@ -99,6 +102,9 @@ export async function listExpressionBatchJobs(language?: string): Promise<Expres
       count: data.count,
       status: data.status,
       requestedBy: data.requestedBy,
+      phase: data.phase ?? null,
+      meaningLanguage: data.meaningLanguage ?? null,
+      campaignId: data.campaignId ?? null,
       createdAt: data.createdAt.toDate().toISOString(),
       completedAt: data.completedAt ? data.completedAt.toDate().toISOString() : null,
       error: data.error ?? null,

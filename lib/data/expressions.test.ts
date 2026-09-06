@@ -112,6 +112,7 @@ describe('listExpressionBatchJobs', () => {
 
     expect(result).toEqual([{
       id: 'job1', language: 'en', count: 10, status: 'succeeded', requestedBy: 'manual',
+      phase: null, meaningLanguage: null, campaignId: null,
       createdAt: '2026-08-05T00:00:00.000Z', completedAt: '2026-08-05T01:00:00.000Z', error: null,
     }]);
   });
