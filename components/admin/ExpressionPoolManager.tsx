@@ -8,6 +8,7 @@ import {
   fetchExpressionBatchJobsAction,
   updateExpressionPoolConfigAction,
   submitExpressionBatchAction,
+  submitExpressionSeedCampaignAction,
 } from "@/lib/actions/expressionActions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -33,6 +34,7 @@ export function ExpressionPoolManager({
     String(configs.find((c) => c.language === initialLanguage)?.targetSize ?? 0),
   );
   const [overrideCount, setOverrideCount] = useState("10");
+  const [seedCount, setSeedCount] = useState("100");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -98,6 +100,28 @@ export function ExpressionPoolManager({
     });
   }
 
+  function handleSubmitSeedCampaign() {
+    const count = Number(seedCount);
+    setError(null);
+    setNotice(null);
+    startTransition(async () => {
+      const result = await submitExpressionSeedCampaignAction(language, count);
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      setNotice(
+        `시딩 캠페인을 시작했습니다 (campaignId: ${result.campaignId}). 텍스트 생성이 끝나면 14개 언어 번역이 자동으로 이어집니다.`,
+      );
+
+      const jobsResult = await fetchExpressionBatchJobsAction(language);
+      if ("error" in jobsResult) {
+        return;
+      }
+      setJobs(jobsResult);
+    });
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-end gap-4">
@@ -143,7 +167,7 @@ export function ExpressionPoolManager({
             <input
               type="number"
               min={1}
-              max={50}
+              max={20}
               value={overrideCount}
               onChange={(e) => setOverrideCount(e.target.value)}
               className="w-20 rounded-md border border-input bg-background px-3 py-1.5"
@@ -163,6 +187,33 @@ export function ExpressionPoolManager({
           <ExpressionsTable language={language} initialPage={expressionsPage} />
         </CardContent>
       </Card>
+
+      <div className="flex flex-col gap-3">
+        <h2 className="text-lg font-semibold">초기 시딩 캠페인</h2>
+        <p className="text-sm text-muted-foreground">
+          큰 목표치를 며칠 안에 채웁니다 — 표현 텍스트를 먼저 생성하고, 14개 언어 번역이 자동으로 이어집니다.
+        </p>
+        <Card>
+          <CardContent>
+            <div className="flex items-end gap-2">
+              <label className="flex flex-col gap-1 text-sm">
+                목표 개수
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={seedCount}
+                  onChange={(e) => setSeedCount(e.target.value)}
+                  className="w-24 rounded-md border border-input bg-background px-3 py-1.5"
+                />
+              </label>
+              <Button type="button" size="sm" disabled={isPending} onClick={handleSubmitSeedCampaign}>
+                시딩 시작
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="flex flex-col gap-3">
         <h2 className="text-lg font-semibold">생성 작업 현황</h2>
