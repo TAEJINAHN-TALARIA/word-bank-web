@@ -50,3 +50,52 @@ describe('submitExpressionBatch', () => {
     await expect(submitExpressionBatch('es', 0)).rejects.toThrow('language와 count(1-50)가 필요합니다');
   });
 });
+
+describe('submitExpressionSeedCampaign', () => {
+  const originalFetch = global.fetch;
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    process.env.STORY_GENERATOR_FUNCTIONS_BASE_URL = 'https://us-central1-wordbank-6284f.cloudfunctions.net';
+    process.env.ADMIN_API_SHARED_SECRET = 'test-secret';
+    global.fetch = vi.fn();
+  });
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    process.env = { ...originalEnv };
+    vi.resetModules();
+  });
+
+  it('jobId/campaignId를 응답으로 받으면 그대로 반환한다', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ jobId: 'job1', campaignId: 'job1' }),
+    });
+
+    const { submitExpressionSeedCampaign } = await import('./expressionPool');
+    const result = await submitExpressionSeedCampaign('en', 366);
+
+    expect(result).toEqual({ jobId: 'job1', campaignId: 'job1' });
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://us-central1-wordbank-6284f.cloudfunctions.net/adminSubmitExpressionSeedCampaign',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ 'x-admin-api-key': 'test-secret' }),
+        body: JSON.stringify({ language: 'en', count: 366 }),
+      }),
+    );
+  });
+
+  it('응답이 실패하면 에러 메시지를 던진다', async () => {
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: 'language와 count(1-500)가 필요합니다' }),
+    });
+
+    const { submitExpressionSeedCampaign } = await import('./expressionPool');
+
+    await expect(submitExpressionSeedCampaign('en', 0)).rejects.toThrow('language와 count(1-500)가 필요합니다');
+  });
+});
