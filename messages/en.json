@@ -80,7 +80,7 @@
   },
   "Privacy": {
     "title": "Privacy Policy",
-    "lastUpdated": "Last updated: August 9, 2026",
+    "lastUpdated": "Last updated: September 24, 2026",
     "intro": "Word Bank (the \"App\") values your privacy. This policy explains what information the App collects, how it is used, and how it is protected.",
     "sections": {
       "collect": {
@@ -96,7 +96,8 @@
           "Word search queries — When you look up a meaning or example, your search term is passed through the app's own server (Firebase Cloud Functions) to the Google Gemini API for processing. No user identifier is included, and the request is handled anonymously.",
           "AI-generated word data — AI-generated meanings, examples, phonetics (IPA), synonyms, and antonyms are cached in Google Firebase. This is a shared cache used to speed up repeat lookups of the same word, and it is de-identified data not linked to any specific user.",
           "Word correction feedback — If you report or request a correction to a word's content (meaning, examples, synonyms, etc.), the word and your feedback are stored in Google Firebase. Stored feedback may be periodically aggregated and used for AI analysis to improve service quality. It does not include your name, email, or other personally identifying information.",
-          "Error reports — When the app crashes or encounters an error, device information (OS version, app version, where the error occurred) is sent to Sentry's servers. Depending on the error, the word or sentence text you were entering at the time may also be included."
+          "Error reports — When the app crashes or encounters an error, device information (OS version, app version, where the error occurred) is sent to Sentry's servers. Depending on the error, the word or sentence text you were entering at the time may also be included.",
+          "Subscription information (Premium subscribers) — Payments are processed by Google Play, and the app never receives card numbers or other payment details. To check your subscription status, your anonymous user identifier and purchase information (product, purchase/renewal/expiry dates, purchase token, etc.) are stored with RevenueCat and Google Firebase."
         ]
       },
       "permissions": {
@@ -121,7 +122,8 @@
           { "name": "Google Gemini API", "purpose": "Generating word meanings and examples (relayed through our own server)" },
           { "name": "Google Firebase", "purpose": "Anonymous authentication, word cache storage, correction feedback storage, usage analytics, push notification delivery" },
           { "name": "Google AdMob", "purpose": "Banner and rewarded ads (non-personalized)" },
-          { "name": "Sentry", "purpose": "App error collection and stability improvement" }
+          { "name": "Sentry", "purpose": "App error collection and stability improvement" },
+          { "name": "RevenueCat", "purpose": "Verifying subscription purchases and managing subscription status" }
         ],
         "viewLink": "View"
       },
@@ -136,7 +138,7 @@
       },
       "retention": {
         "heading": "Data Retention and Deletion",
-        "body": "Local data on your device is deleted when you delete the app. Cached data stored in Firebase is de-identified and is not linked to any specific user."
+        "body": "Local data on your device is deleted when you delete the app. Cached data stored in Firebase is de-identified and is not linked to any specific user. Subscription information is kept for as long as needed to manage your subscription and to meet legal record-keeping obligations."
       },
       "changes": {
         "heading": "Changes to This Policy",
