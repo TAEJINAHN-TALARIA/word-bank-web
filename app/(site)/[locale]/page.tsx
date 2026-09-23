@@ -159,12 +159,20 @@ export default async function Home({ params }: Props) {
       {/* Footer */}
       <footer className="border-t border-zinc-100 dark:border-zinc-800 py-8 text-center text-sm text-zinc-400 dark:text-zinc-500">
         <p className="mb-2">{t("footer.copyright")}</p>
-        <Link
-          href="/privacy"
-          className="hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-        >
-          {t("footer.privacyLink")}
-        </Link>
+        <div className="flex justify-center gap-4">
+          <Link
+            href="/privacy"
+            className="hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          >
+            {t("footer.privacyLink")}
+          </Link>
+          <Link
+            href="/terms"
+            className="hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+          >
+            {t("footer.termsLink")}
+          </Link>
+        </div>
       </footer>
     </div>
   );
