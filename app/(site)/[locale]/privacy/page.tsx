@@ -9,6 +9,7 @@ const THIRD_PARTY_POLICY_URLS: Record<string, string> = {
   "Google Firebase": "https://firebase.google.com/support/privacy",
   "Google AdMob": "https://policies.google.com/technologies/ads",
   Sentry: "https://sentry.io/privacy/",
+  RevenueCat: "https://www.revenuecat.com/privacy",
 };
 
 export default async function PrivacyPolicy({ params }: Props) {

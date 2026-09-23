@@ -74,12 +74,13 @@
     "ctaHeading": "Get started now",
     "footer": {
       "copyright": "© 2026 Talaria. All rights reserved.",
-      "privacyLink": "Privacy Policy"
+      "privacyLink": "Privacy Policy",
+      "termsLink": "Terms of Service"
     }
   },
   "Privacy": {
     "title": "Privacy Policy",
-    "lastUpdated": "Last updated: August 9, 2026",
+    "lastUpdated": "Last updated: September 24, 2026",
     "intro": "Word Bank (the \"App\") values your privacy. This policy explains what information the App collects, how it is used, and how it is protected.",
     "sections": {
       "collect": {
@@ -95,7 +96,8 @@
           "Word search queries — When you look up a meaning or example, your search term is passed through the app's own server (Firebase Cloud Functions) to the Google Gemini API for processing. No user identifier is included, and the request is handled anonymously.",
           "AI-generated word data — AI-generated meanings, examples, phonetics (IPA), synonyms, and antonyms are cached in Google Firebase. This is a shared cache used to speed up repeat lookups of the same word, and it is de-identified data not linked to any specific user.",
           "Word correction feedback — If you report or request a correction to a word's content (meaning, examples, synonyms, etc.), the word and your feedback are stored in Google Firebase. Stored feedback may be periodically aggregated and used for AI analysis to improve service quality. It does not include your name, email, or other personally identifying information.",
-          "Error reports — When the app crashes or encounters an error, device information (OS version, app version, where the error occurred) is sent to Sentry's servers. Depending on the error, the word or sentence text you were entering at the time may also be included."
+          "Error reports — When the app crashes or encounters an error, device information (OS version, app version, where the error occurred) is sent to Sentry's servers. Depending on the error, the word or sentence text you were entering at the time may also be included.",
+          "Subscription information (Premium subscribers) — Payments are processed by Google Play, and the app never receives card numbers or other payment details. To check your subscription status, your anonymous user identifier and purchase information (product, purchase/renewal/expiry dates, purchase token, etc.) are stored with RevenueCat and Google Firebase."
         ]
       },
       "permissions": {
@@ -120,7 +122,8 @@
           { "name": "Google Gemini API", "purpose": "Generating word meanings and examples (relayed through our own server)" },
           { "name": "Google Firebase", "purpose": "Anonymous authentication, word cache storage, correction feedback storage, usage analytics, push notification delivery" },
           { "name": "Google AdMob", "purpose": "Banner and rewarded ads (non-personalized)" },
-          { "name": "Sentry", "purpose": "App error collection and stability improvement" }
+          { "name": "Sentry", "purpose": "App error collection and stability improvement" },
+          { "name": "RevenueCat", "purpose": "Verifying subscription purchases and managing subscription status" }
         ],
         "viewLink": "View"
       },
@@ -135,7 +138,7 @@
       },
       "retention": {
         "heading": "Data Retention and Deletion",
-        "body": "Local data on your device is deleted when you delete the app. Cached data stored in Firebase is de-identified and is not linked to any specific user."
+        "body": "Local data on your device is deleted when you delete the app. Cached data stored in Firebase is de-identified and is not linked to any specific user. Subscription information is kept for as long as needed to manage your subscription and to meet legal record-keeping obligations."
       },
       "changes": {
         "heading": "Changes to This Policy",
@@ -147,5 +150,124 @@
       }
     },
     "backHome": "← Back home"
+  },
+  "Terms": {
+    "title": "Terms of Service",
+    "lastUpdated": "Last updated: September 24, 2026",
+    "intro": "These Terms govern your use of the Word Bank app (the \"App\") provided by Talaria (the \"Operator\"). By installing or using the App, you agree to these Terms.",
+    "sections": [
+      {
+        "heading": "About the Service",
+        "paragraphs": [
+          "The App is a vocabulary service for language learners. When you enter a word or select a sentence in a story, AI organizes its meanings, examples and part of speech into your wordbook, and you can review with flashcards and spaced repetition."
+        ]
+      },
+      {
+        "heading": "Accounts",
+        "paragraphs": [
+          "You can use the App without signing up. On first launch the App creates an anonymous identifier for your device, which is used to manage usage limits and subscription status.",
+          "If you uninstall the App or change devices, a new anonymous identifier is created. You can recover an active subscription with Restore Purchases, described under 'Premium Subscription'."
+        ]
+      },
+      {
+        "heading": "Free Use and Usage Limits",
+        "items": [
+          "Free users can add up to 5 words a day with AI.",
+          "Watching an ad grants additional additions.",
+          "The daily limit resets every day at 00:00 UTC.",
+          "Use beyond normal learning, such as bulk requests with automated tools, may be restricted."
+        ]
+      },
+      {
+        "heading": "Premium Subscription",
+        "paragraphs": [
+          "With a Premium subscription you can use the App without ads and add up to 100 words a day with AI. The 100-word daily limit exists to keep the service stable and fair for everyone."
+        ],
+        "items": [
+          "Payment is charged to your Google Play account. The price and billing period (monthly or yearly) are shown on the purchase screen.",
+          "Your subscription renews automatically on the same terms and you are charged for renewal unless you cancel at least 24 hours before the end of the current period.",
+          "You can cancel in the Google Play app under 'Payments & subscriptions', or from 'Manage subscription' in the App's settings. After cancelling, you keep your benefits until the end of the period you've paid for.",
+          "If a free trial is offered, it converts to a paid subscription automatically unless you cancel before the trial ends.",
+          "If the subscription price changes, you will be notified in advance and asked for consent where required, following Google Play's process.",
+          "If you reinstall the App or change devices, use 'Restore purchases' in the App's settings with the same Google account to recover your subscription."
+        ]
+      },
+      {
+        "heading": "Cancellation Rights and Refunds",
+        "paragraphs": [
+          "You may withdraw from a purchase to the extent permitted by applicable law, including consumer protection laws in your country. This right may be limited where the law allows, for example once the supply of digital content has begun.",
+          "Refunds are handled by Google Play under Google Play's refund policy. You can also contact us about refunds at the address below."
+        ]
+      },
+      {
+        "heading": "Minors",
+        "paragraphs": [
+          "If a minor purchases a subscription without the consent of a parent or legal guardian, the minor or the guardian may cancel it as provided by applicable law."
+        ]
+      },
+      {
+        "heading": "AI-Generated Content",
+        "paragraphs": [
+          "Meanings, examples and parts of speech in the App are generated automatically by AI and may be wrong or inaccurate. Use them as learning aids only, and check a dictionary or other source where accuracy matters, such as exams or work. You can report incorrect content with the App's correction feature."
+        ]
+      },
+      {
+        "heading": "Data Storage and Backups",
+        "paragraphs": [
+          "Your wordbook, categories, study history and settings are stored only on your device. If you uninstall the App, clear its data or change devices, this data cannot be recovered.",
+          "Please back up important wordbooks regularly with 'Export to Excel' in the App's settings. The Operator is not responsible for the loss of data stored on your device."
+        ]
+      },
+      {
+        "heading": "Prohibited Conduct",
+        "items": [
+          "Reverse engineering or tampering with the App or its servers, or accessing them by abnormal means",
+          "Attempting to bypass usage limits or payment",
+          "Placing excessive load on the service with automated tools",
+          "Copying, distributing or commercially using the App's content (stories, illustrations, etc.) without the Operator's permission"
+        ]
+      },
+      {
+        "heading": "Intellectual Property",
+        "paragraphs": [
+          "The App and the stories, illustrations and designs it provides belong to the Operator or their rightful owners. The words and notes you save in your wordbook belong to you."
+        ]
+      },
+      {
+        "heading": "Ads and Third-Party Services",
+        "paragraphs": [
+          "The App uses Google Play (payments), Google Firebase (authentication, database, analytics), RevenueCat (subscription management), Google AdMob (ads), the Google Gemini API (AI content generation) and Sentry (error reporting). Their own terms and policies may also apply to your use of them. See our Privacy Policy for details on how personal information is handled."
+        ]
+      },
+      {
+        "heading": "Changes to or Discontinuation of the Service",
+        "paragraphs": [
+          "The Operator may add, change or remove features to improve the service. For significant changes that disadvantage paying subscribers, or if the service is discontinued, we will give advance notice in the App or on this website and handle it according to applicable law and Google Play policy."
+        ]
+      },
+      {
+        "heading": "Limitation of Liability",
+        "paragraphs": [
+          "The Operator strives to provide the service reliably but is not liable for damages caused by events beyond its control, such as natural disasters, network outages or failures of third-party services. Damages caused by the Operator's intent or gross negligence are governed by applicable law."
+        ]
+      },
+      {
+        "heading": "Changes to These Terms",
+        "paragraphs": [
+          "The Operator may change these Terms where necessary, within the limits of applicable law. Changes will be posted on this page with their effective date, and changes that disadvantage users will be announced at least 30 days in advance."
+        ]
+      },
+      {
+        "heading": "Governing Law and Disputes",
+        "paragraphs": [
+          "These Terms are governed by the laws of the Republic of Korea. Disputes arising from use of the service will be resolved by the competent court under the Korean Civil Procedure Act, without prejudice to any mandatory consumer protections in your country of residence."
+        ]
+      }
+    ],
+    "contact": {
+      "heading": "Contact",
+      "prefix": "For questions about these Terms, subscriptions or refunds, email us at:"
+    },
+    "backHome": "← Back to home"
   }
 }
