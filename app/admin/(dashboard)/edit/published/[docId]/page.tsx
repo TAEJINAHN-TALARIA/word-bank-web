@@ -23,7 +23,7 @@ export default async function PublishedEditPage({
         <p className="text-sm text-muted-foreground">
           한국어 게시본만 편집할 수 있어요. 번역본({story.lang})을 직접 고치면 한국어 원문과 어긋납니다.
         </p>
-        <Link href="/admin/edit" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}>
+        <Link href="/admin/published" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "self-start")}>
           목록으로
         </Link>
       </div>

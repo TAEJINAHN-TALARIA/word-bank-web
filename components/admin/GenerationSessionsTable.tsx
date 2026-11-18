@@ -4,9 +4,9 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import type { PipelineSessionSummary } from "@/lib/data/pipelineSessions";
 import { fetchMoreSessionsAction } from "@/lib/actions/pipelineSessionsActions";
-import { statusBadgeVariant } from "@/lib/status";
+import { sessionStage } from "@/lib/sessionStage";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyTableRow } from "@/components/admin/EmptyTableRow";
 import { InlineError } from "@/components/admin/InlineError";
+import { cn } from "@/lib/utils";
 
 export function GenerationSessionsTable({
   initialSessions,
@@ -60,10 +61,13 @@ export function GenerationSessionsTable({
             <TableHead>Combo</TableHead>
             <TableHead>대상 언어</TableHead>
             <TableHead>생성일</TableHead>
+            <TableHead className="text-right">다음 할 일</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {sessions.map((session) => (
+          {sessions.map((session) => {
+            const stage = sessionStage(session.status, session.id);
+            return (
             <TableRow key={session.id}>
               <TableCell className="font-mono text-xs">
                 <Link
@@ -74,7 +78,7 @@ export function GenerationSessionsTable({
                 </Link>
               </TableCell>
               <TableCell>
-                <Badge variant={statusBadgeVariant(session.status)}>{session.status}</Badge>
+                <Badge variant={stage.variant}>{stage.label}</Badge>
               </TableCell>
               <TableCell>{session.targetLevel}</TableCell>
               <TableCell className="whitespace-normal">
@@ -89,9 +93,19 @@ export function GenerationSessionsTable({
               <TableCell className="whitespace-normal text-muted-foreground">
                 {session.createdAt}
               </TableCell>
+              <TableCell className="text-right">
+                {stage.next ? (
+                  <Link href={stage.next.href} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+                    {stage.next.label}
+                  </Link>
+                ) : (
+                  <span className="text-xs text-muted-foreground">{session.status === "in_progress" ? "자동 진행 중" : "—"}</span>
+                )}
+              </TableCell>
             </TableRow>
-          ))}
-          {sessions.length === 0 && <EmptyTableRow colSpan={6} message="생성 세션이 없습니다." />}
+            );
+          })}
+          {sessions.length === 0 && <EmptyTableRow colSpan={7} message="생성 세션이 없습니다." />}
         </TableBody>
       </Table>
       {error && <InlineError message={error} />}

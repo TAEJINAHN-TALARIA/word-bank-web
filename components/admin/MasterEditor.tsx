@@ -216,9 +216,16 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
             <span className="text-xs text-muted-foreground">{detail.id}</span>
           </div>
         </div>
-        <Link href="/admin/edit" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
-          목록으로
-        </Link>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {isReview && (
+            <Link href={`/admin/generation/${detail.id}`} className={cn(buttonVariants({ variant: "outline", size: "sm" }))}>
+              생성 상세
+            </Link>
+          )}
+          <Link href={isReview ? "/admin/edit" : "/admin/published"} className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+            목록으로
+          </Link>
+        </div>
       </div>
 
       {!isReview && (

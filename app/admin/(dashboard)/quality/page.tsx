@@ -19,7 +19,7 @@ export default async function QualityReportPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">품질 리포트</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">단어 신고·품질</h1>
         <p className="text-sm text-muted-foreground">
           사용자 신고 추이와 AI 분석 결과를 확인하고, 오신고로 숨겨진 단어를 복구하세요.
         </p>

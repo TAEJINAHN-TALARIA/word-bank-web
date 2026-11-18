@@ -1,18 +1,9 @@
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
-import Link from "next/link";
 import { getAdminSession } from "@/lib/auth/session";
 import { SignOutButton } from "@/components/admin/SignOutButton";
-
-const NAV_ITEMS = [
-  { href: "/admin", label: "홈" },
-  { href: "/admin/generation", label: "생성 진행상황" },
-  { href: "/admin/edit", label: "소설 편집" },
-  { href: "/admin/review", label: "검토/게시" },
-  { href: "/admin/quality", label: "품질 리포트" },
-  { href: "/admin/word-cache", label: "단어캐시 현황" },
-  { href: "/admin/expressions", label: "표현 풀 관리" },
-];
+import { AdminNav } from "@/components/admin/AdminNav";
+import { getAdminNavCounts } from "@/lib/data/adminCounts";
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const session = await getAdminSession();
@@ -21,29 +12,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect(`/admin/login?redirect=${encodeURIComponent(pathname)}`);
   }
 
+  // 메뉴 옆 숫자는 집계 쿼리라 가볍고, 항목별로 실패를 격리해서 메뉴 렌더링을 막지 않는다.
+  const counts = await getAdminNavCounts();
+
   return (
-    <div className="flex min-h-screen bg-background">
-      <aside className="flex w-60 shrink-0 flex-col gap-6 border-r border-border p-6">
-        <span className="text-sm font-semibold tracking-tight">Word Bank Admin</span>
-        <nav>
-          <ul className="flex flex-col gap-1 text-sm">
-            {NAV_ITEMS.map((item) => (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className="block rounded-md px-3 py-2 font-medium text-foreground/70 transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  {item.label}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <div className="mt-auto">
-          <SignOutButton />
-        </div>
-      </aside>
-      <main className="flex-1 overflow-x-auto p-8">{children}</main>
+    <div className="min-h-screen bg-background lg:flex">
+      <AdminNav counts={counts} signOut={<SignOutButton />} />
+      <main className="min-w-0 flex-1 overflow-x-auto p-4 sm:p-6 lg:p-8">{children}</main>
     </div>
   );
 }
