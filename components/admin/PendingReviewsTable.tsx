@@ -287,6 +287,11 @@ export function PendingReviewsTable({
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <Badge variant={statusBadgeVariant(item.gateStatus)}>{item.gateStatus}</Badge>
+                            {item.masterReviewed === false && (
+                              <Badge variant="warning" title="마스터 검토 게이트가 생기기 전에 만들어져 사람이 읽고 승인하지 않은 소설입니다">
+                                마스터 미검토
+                              </Badge>
+                            )}
                             {failureByKey.has(key2) && (
                               <InlineError message={`게시 실패: ${failureByKey.get(key2)}`} />
                             )}

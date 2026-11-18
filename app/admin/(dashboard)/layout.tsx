@@ -7,6 +7,7 @@ import { SignOutButton } from "@/components/admin/SignOutButton";
 const NAV_ITEMS = [
   { href: "/admin", label: "홈" },
   { href: "/admin/generation", label: "생성 진행상황" },
+  { href: "/admin/edit", label: "소설 편집" },
   { href: "/admin/review", label: "검토/게시" },
   { href: "/admin/quality", label: "품질 리포트" },
   { href: "/admin/word-cache", label: "단어캐시 현황" },

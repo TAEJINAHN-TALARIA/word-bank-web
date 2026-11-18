@@ -148,6 +148,14 @@ export function PublishedStoriesTable({
                       <TableCell>{story.chapterCount}개</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          {story.lang === "ko" && (
+                            <Link
+                              href={`/admin/edit/published/${story.id}`}
+                              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                            >
+                              편집
+                            </Link>
+                          )}
                           <a
                             href={`/admin/review/${story.id}/download`}
                             download
