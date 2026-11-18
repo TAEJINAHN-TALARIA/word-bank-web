@@ -38,6 +38,8 @@
 
 ### Task 3: Claude 호출 `lib/claude/*`
 
+> **변경(2026-11-18, 작업 공간 반영):** 아래의 "문단 제안"(`suggestParagraph`, 현재/제안 한 장짜리 카드)은 **"방향 제시"(`suggestIdeas`)와 "다듬기"(`polishParagraph`)로 나뉘어 대체**됐다. 방향 제시는 완성 글이 아닌 스케치 3개(줄거리를 바꾸는 제안 허용, 마스터 검토에서만), 다듬기는 통째로 바꾼 글이 아니라 `{before, after, reason}` 목록이며 수정은 항목별 수락/거절이다. 화면은 `ParagraphWorkspace`(방향 → 쓰기 → 다듬기 + 버전 기록 + 문단 추가·삭제·이동), 오른쪽은 `ClaudePanel`(사전 검토 메모·전체 점검)과 `ReferenceCards`(문장 길이·인물 말투)다. 목업: https://claude.ai/artifact/UHoiDmDUNjSN74rumRVMRf
+
 **Files:** Create `lib/claude/client.ts`, `lib/claude/suggest.ts`, `lib/claude/reviewStory.ts`, `lib/claude/preReview.ts`(+ 각 `.test.ts`); Modify `package.json`(`@anthropic-ai/sdk`), `.env.example`(`ANTHROPIC_API_KEY`)
 
 - [x] 구현 전에 `claude-api` 스킬을 읽는다(모델 ID, `output_config.format` 구조화 출력, prompt caching, `fallbacks` 규칙이 바뀌는 영역).

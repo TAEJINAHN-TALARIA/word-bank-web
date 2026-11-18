@@ -12,7 +12,8 @@ import {
   saveMasterReviewAction,
   approveMasterReviewAction,
   editPublishedStoryAction,
-  suggestParagraphAction,
+  suggestIdeasAction,
+  polishParagraphAction,
   reviewStoryAction,
   ensurePreReviewAction,
 } from "./masterReviewActions";
@@ -49,13 +50,15 @@ describe("관리자 세션 재확인", () => {
     expect(await saveMasterReviewAction({ sessionId: "s1", edits: [], confirmedChapters: [] })).toEqual(expected);
     expect(await approveMasterReviewAction("s1")).toEqual(expected);
     expect(await editPublishedStoryAction({ docId: "d1", edits: [] })).toEqual(expected);
-    expect(await suggestParagraphAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0, instruction: "x" })).toEqual(expected);
+    expect(await suggestIdeasAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0 })).toEqual(expected);
+    expect(await polishParagraphAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0 })).toEqual(expected);
     expect(await reviewStoryAction({ mode: "review", id: "s1", chapters, kind: "flow" })).toEqual(expected);
     expect(await ensurePreReviewAction("s1")).toEqual(expected);
 
     expect(generator.saveMasterReview).not.toHaveBeenCalled();
     expect(generator.approveMasterReview).not.toHaveBeenCalled();
-    expect(editor.suggestParagraph).not.toHaveBeenCalled();
+    expect(editor.suggestIdeas).not.toHaveBeenCalled();
+    expect(editor.polishParagraph).not.toHaveBeenCalled();
   });
 });
 
@@ -112,27 +115,62 @@ describe("editPublishedStoryAction", () => {
 });
 
 describe("Claude 액션", () => {
-  it("문단 제안: 서버에서 설정집을 읽어 현재 본문과 함께 Claude에 넘긴다", async () => {
+  it("방향 제시: 서버에서 설정집을 읽어 현재 본문과 함께 Claude에 넘긴다", async () => {
     vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(detail());
-    vi.mocked(editor.suggestParagraph).mockResolvedValueOnce({ kind: "suggestion", reason: "짧게", after: "하린이 문을 열었다." });
+    const ideas = [{ title: "젖지 않은 우산", sketch: "물이 안 떨어진다", link: "7장" }];
+    vi.mocked(editor.suggestIdeas).mockResolvedValueOnce(ideas);
 
-    const result = await suggestParagraphAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0, instruction: "짧게" });
+    const result = await suggestIdeasAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0, instruction: "더 긴장되게" });
 
-    expect(result).toEqual({ kind: "suggestion", reason: "짧게", after: "하린이 문을 열었다." });
-    expect(editor.suggestParagraph).toHaveBeenCalledWith(
-      expect.objectContaining({ chapters, characters: detail().characters, narrativeStyle: "-했다체", level: "Lv3", chapterNumber: 1, paragraphIndex: 0, instruction: "짧게" }),
+    expect(result).toEqual({ ideas });
+    expect(editor.suggestIdeas).toHaveBeenCalledWith(
+      expect.objectContaining({ chapters, characters: detail().characters, narrativeStyle: "-했다체", level: "Lv3", chapterNumber: 1, paragraphIndex: 0, instruction: "더 긴장되게" }),
     );
   });
 
-  it("형태가 틀린 챕터 입력은 Claude를 부르지 않고 거절한다", async () => {
-    const result = await suggestParagraphAction({
-      mode: "review", id: "s1", chapters: [{ chapterNumber: "1" }] as unknown as MasterChapter[], chapterNumber: 1, paragraphIndex: 0, instruction: "x",
-    });
+  it("방향 제시는 마스터 검토에서만 가능하다 — 게시된 소설은 표현 수정만 허용하므로 Claude를 부르지 않고 거절한다", async () => {
+    const result = await suggestIdeasAction({ mode: "published", id: "d1", chapters, chapterNumber: 1, paragraphIndex: 0 });
     expect(result).toHaveProperty("error");
-    expect(editor.suggestParagraph).not.toHaveBeenCalled();
+    expect(editor.suggestIdeas).not.toHaveBeenCalled();
   });
 
-  it("게시본 모드는 게시본 설정집을 읽는다", async () => {
+  it("다듬기: 고른 방향과 거절한 제안을 함께 넘기고 고칠 곳 목록을 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(detail());
+    const changes = [{ before: "문을 열었다", after: "문을 밀었다", reason: "동작이 구체적이에요" }];
+    vi.mocked(editor.polishParagraph).mockResolvedValueOnce(changes);
+
+    const result = await polishParagraphAction({
+      mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0,
+      direction: { title: "젖지 않은 우산", sketch: "물이 안 떨어진다" },
+      rejected: [{ before: "하린은", after: "하린이" }],
+    });
+
+    expect(result).toEqual({ changes });
+    expect(editor.polishParagraph).toHaveBeenCalledWith(
+      expect.objectContaining({ direction: { title: "젖지 않은 우산", sketch: "물이 안 떨어진다" }, rejected: [{ before: "하린은", after: "하린이" }] }),
+    );
+  });
+
+  it("다듬기는 게시된 소설에서도 쓸 수 있다", async () => {
+    vi.mocked(reviews.getPublishedStoryForEdit).mockResolvedValueOnce({ lang: "ko", detail: detail({ mode: "published", levelGuidance: null }) });
+    vi.mocked(editor.polishParagraph).mockResolvedValueOnce([]);
+    expect(await polishParagraphAction({ mode: "published", id: "d1", chapters, chapterNumber: 1, paragraphIndex: 0 })).toEqual({ changes: [] });
+  });
+
+  it("형태가 틀리거나 과도한 입력은 Claude를 부르지 않고 거절한다", async () => {
+    const bad = [{ chapterNumber: "1" }] as unknown as MasterChapter[];
+    expect(await suggestIdeasAction({ mode: "review", id: "s1", chapters: bad, chapterNumber: 1, paragraphIndex: 0 })).toHaveProperty("error");
+    expect(
+      await polishParagraphAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0, rejected: Array.from({ length: 21 }, () => ({ before: "a", after: "b" })) }),
+    ).toHaveProperty("error");
+    expect(
+      await polishParagraphAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0, instruction: "가".repeat(501) }),
+    ).toHaveProperty("error");
+    expect(editor.suggestIdeas).not.toHaveBeenCalled();
+    expect(editor.polishParagraph).not.toHaveBeenCalled();
+  });
+
+  it("게시본 모드의 전체 점검은 게시본 설정집을 읽는다", async () => {
     vi.mocked(reviews.getPublishedStoryForEdit).mockResolvedValueOnce({ lang: "ko", detail: detail({ mode: "published", levelGuidance: null }) });
     vi.mocked(editor.reviewStory).mockResolvedValueOnce({ title: "전체 흐름", items: [] });
 
@@ -144,8 +182,7 @@ describe("Claude 액션", () => {
 
   it("없는 소설이면 에러를 돌려준다", async () => {
     vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(null);
-    const result = await suggestParagraphAction({ mode: "review", id: "nope", chapters, chapterNumber: 1, paragraphIndex: 0, instruction: "x" });
-    expect(result).toHaveProperty("error");
+    expect(await suggestIdeasAction({ mode: "review", id: "nope", chapters, chapterNumber: 1, paragraphIndex: 0 })).toHaveProperty("error");
   });
 
   it("Claude 호출 실패 메시지를 error로 돌려준다", async () => {

@@ -13,14 +13,14 @@ import {
 } from "@/lib/admin-functions/storyGenerator";
 import { getMasterReview, getPublishedStoryForEdit } from "@/lib/data/masterReviews";
 import {
-  suggestParagraph,
+  suggestIdeas,
+  polishParagraph,
   reviewStory,
   generatePreReview,
   type EditorContextInput,
-  type SuggestionResult,
   type StoryReviewResult,
 } from "@/lib/claude/editor";
-import type { StoryReviewKind } from "@/lib/claude/editing";
+import type { Idea, IdeaDirection, PolishChange, RejectedChange, StoryReviewKind } from "@/lib/claude/editing";
 import { isValidChaptersInput, type EditorDetail, type MasterChapter, type PreReviewItem } from "@/lib/masterReview";
 
 /**
@@ -117,21 +117,69 @@ async function loadContext(target: ClaudeTarget): Promise<EditorContextInput | {
   };
 }
 
-export async function suggestParagraphAction(
-  input: ClaudeTarget & { chapterNumber: number; paragraphIndex: number; instruction: string },
-): Promise<{ error: string } | SuggestionResult> {
+// 작업 스레드(고른 방향, 거절한 제안, 지시)는 화면이 들고 있다가 요청마다 함께 보낸다. 서버는 크기만 제한한다.
+const MAX_TEXT = 500;
+const MAX_REJECTED = 20;
+
+function tooLong(...texts: (string | undefined)[]): boolean {
+  return texts.some((t) => (t?.length ?? 0) > MAX_TEXT);
+}
+
+// ① 방향 제시. 줄거리를 바꾸는 제안도 하므로 게시된 소설(표현 수정만 허용)에서는 받지 않는다.
+export async function suggestIdeasAction(
+  input: ClaudeTarget & { chapterNumber: number; paragraphIndex: number; instruction?: string },
+): Promise<{ error?: string; ideas?: Idea[] }> {
   if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  if (input.mode !== "review") return { error: "게시된 소설은 표현 수정만 할 수 있어 방향 제안을 받을 수 없습니다" };
+  if (tooLong(input.instruction)) return { error: "지시가 너무 깁니다" };
   try {
     const context = await loadContext(input);
     if ("error" in context) return context;
-    return await suggestParagraph({
+    const ideas = await suggestIdeas({
       ...context,
       chapterNumber: input.chapterNumber,
       paragraphIndex: input.paragraphIndex,
       instruction: input.instruction,
     });
+    return { ideas };
   } catch (err) {
-    return { error: messageOf(err, "제안 생성 실패") };
+    return { error: messageOf(err, "방향 제안 실패") };
+  }
+}
+
+// ③ 다듬기. 현재 편집 중인 본문에서 고칠 곳 목록만 돌려준다(본문은 바꾸지 않는다).
+export async function polishParagraphAction(
+  input: ClaudeTarget & {
+    chapterNumber: number;
+    paragraphIndex: number;
+    direction?: IdeaDirection | null;
+    rejected?: RejectedChange[];
+    instruction?: string;
+  },
+): Promise<{ error?: string; changes?: PolishChange[] }> {
+  if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  const rejected = input.rejected ?? [];
+  if (
+    rejected.length > MAX_REJECTED ||
+    rejected.some((r) => tooLong(r.before, r.after)) ||
+    tooLong(input.instruction, input.direction?.title, input.direction?.sketch)
+  ) {
+    return { error: "요청 내용이 너무 깁니다" };
+  }
+  try {
+    const context = await loadContext(input);
+    if ("error" in context) return context;
+    const changes = await polishParagraph({
+      ...context,
+      chapterNumber: input.chapterNumber,
+      paragraphIndex: input.paragraphIndex,
+      direction: input.direction,
+      rejected,
+      instruction: input.instruction,
+    });
+    return { changes };
+  } catch (err) {
+    return { error: messageOf(err, "다듬기 실패") };
   }
 }
 

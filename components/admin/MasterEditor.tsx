@@ -12,7 +12,12 @@ import {
   buildPublishedEdits,
   buildSaveEdits,
   countEditedParagraphs,
+  editedParagraphKeys,
+  insertParagraph,
+  locateMemos,
+  moveParagraph,
   normalizeParagraphs,
+  removeParagraph,
   type EditorDetail,
   type MasterChapter,
   type PreReviewItem,
@@ -22,13 +27,10 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { InlineError } from "@/components/admin/InlineError";
 import { ClaudePanel } from "@/components/admin/ClaudePanel";
 import { FullReadView } from "@/components/admin/FullReadView";
+import { ParagraphWorkspace } from "@/components/admin/ParagraphWorkspace";
 import { cn } from "@/lib/utils";
 
 type Selected = { chapterNumber: number; paragraphIndex: number };
-
-function paragraphAt(chapters: MasterChapter[], chapterNumber: number, index: number): string | undefined {
-  return chapters.find((c) => c.chapterNumber === chapterNumber)?.paragraphs[index];
-}
 
 function sameNumbers(a: number[], b: number[]): boolean {
   return a.length === b.length && [...a].sort().every((n, i) => n === [...b].sort()[i]);
@@ -71,23 +73,10 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   }, [isReview, preReview, detail.id]);
   const memosLoading = isReview && preReview === null && memosError === null;
 
-  const isEdited = (chapterNumber: number, index: number) =>
-    paragraphAt(chapters, chapterNumber, index) !== paragraphAt(detail.original, chapterNumber, index);
-
-  const memos = useMemo(
-    () => (preReview ?? []).filter((m) => paragraphAt(chapters, m.chapterNumber, m.paragraphIndex) === paragraphAt(detail.original, m.chapterNumber, m.paragraphIndex)),
-    [preReview, chapters, detail.original],
-  );
+  // 문단을 추가·이동하면 위치(index)가 밀리므로 메모와 "수정됨" 표시는 위치가 아니라 문단 내용으로 따라간다.
+  const memos = useMemo(() => locateMemos(preReview ?? [], detail.chapters, chapters), [preReview, detail.chapters, chapters]);
   const memoByKey = useMemo(() => new Map(memos.map((m) => [`${m.chapterNumber}-${m.paragraphIndex}`, m.kind])), [memos]);
-  const editedKeys = useMemo(() => {
-    const keys = new Set<string>();
-    for (const c of chapters) {
-      c.paragraphs.forEach((_, i) => {
-        if (paragraphAt(chapters, c.chapterNumber, i) !== paragraphAt(detail.original, c.chapterNumber, i)) keys.add(`${c.chapterNumber}-${i}`);
-      });
-    }
-    return keys;
-  }, [chapters, detail.original]);
+  const editedKeys = useMemo(() => editedParagraphKeys(chapters, detail.original), [chapters, detail.original]);
 
   const dirty = isReview
     ? buildSaveEdits(chapters, baseline).length > 0 || !sameNumbers(confirmed, savedConfirmed)
@@ -105,6 +94,14 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   const locked = busy !== null || approved;
   const currentChapter = chapters.find((c) => c.chapterNumber === selected.chapterNumber) ?? chapters[0];
   const originalChapter = detail.original.find((c) => c.chapterNumber === currentChapter?.chapterNumber);
+  // 문단을 지운 뒤 등으로 선택 위치가 범위를 벗어나면 마지막 문단으로 맞춘다.
+  const paragraphIndex = currentChapter ? Math.min(selected.paragraphIndex, currentChapter.paragraphs.length - 1) : 0;
+  const currentText = currentChapter?.paragraphs[paragraphIndex] ?? "";
+  // 문단 수가 같을 때만 같은 위치의 원본 문단을 비교 대상으로 보여준다(구조가 바뀌면 짝이 맞지 않는다).
+  const originalText =
+    originalChapter && currentChapter && originalChapter.paragraphs.length === currentChapter.paragraphs.length
+      ? originalChapter.paragraphs[paragraphIndex]
+      : undefined;
 
   function updateChapter(chapterNumber: number, update: (c: MasterChapter) => MasterChapter) {
     setSavedAt(false);
@@ -113,6 +110,24 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
 
   function updateParagraph(chapterNumber: number, index: number, text: string) {
     updateChapter(chapterNumber, (c) => ({ ...c, paragraphs: c.paragraphs.map((p, i) => (i === index ? text : p)) }));
+  }
+
+  function insertAt(chapterNumber: number, at: number) {
+    setSavedAt(false);
+    setChapters((prev) => insertParagraph(prev, chapterNumber, at));
+    setSelected({ chapterNumber, paragraphIndex: at });
+  }
+
+  function removeAt(chapterNumber: number, index: number) {
+    setSavedAt(false);
+    setChapters((prev) => removeParagraph(prev, chapterNumber, index));
+    setSelected({ chapterNumber, paragraphIndex: Math.max(0, index - 1) });
+  }
+
+  function moveBy(chapterNumber: number, index: number, delta: -1 | 1) {
+    setSavedAt(false);
+    setChapters((prev) => moveParagraph(prev, chapterNumber, index, index + delta));
+    setSelected({ chapterNumber, paragraphIndex: index + delta });
   }
 
   function jump(chapterNumber: number, paragraphIndex: number) {
@@ -237,14 +252,18 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
       )}
 
       <div className="grid gap-5 lg:grid-cols-[15rem_minmax(0,1fr)_21rem] lg:items-start">
-        <nav aria-label="챕터 목록" className="flex flex-col gap-1 rounded-xl border border-border bg-card p-3">
+        <nav aria-label="챕터 목록" className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-card p-3">
           <h2 className="px-2 pt-1 pb-2 text-sm font-semibold">
             {isReview ? `챕터 ${confirmed.length}/${chapters.length} 확인` : `챕터 ${chapters.length}개`}
           </h2>
+          {/* 좁은 화면에서는 옆으로 미는 한 줄로 두어 편집 영역이 아래로 밀리지 않게 한다 */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:gap-1 lg:overflow-visible lg:pb-0">
           {chapters.map((c) => {
             const active = view === "edit" && c.chapterNumber === selected.chapterNumber;
             const memoCount = memos.filter((m) => m.chapterNumber === c.chapterNumber).length;
-            const chapterEdited = c.paragraphs.some((_, i) => isEdited(c.chapterNumber, i)) || c.paragraphs.length !== (detail.original.find((o) => o.chapterNumber === c.chapterNumber)?.paragraphs.length ?? c.paragraphs.length);
+            const chapterEdited =
+              [...editedKeys].some((k) => k.startsWith(`${c.chapterNumber}-`)) ||
+              c.paragraphs.length !== (detail.original.find((o) => o.chapterNumber === c.chapterNumber)?.paragraphs.length ?? c.paragraphs.length);
             let tag: { text: string; variant: "success" | "warning" | "secondary" | "outline" } = { text: "검토 중", variant: "secondary" };
             if (!isReview) tag = chapterEdited ? { text: "수정됨", variant: "outline" } : { text: "", variant: "outline" };
             else if (confirmed.includes(c.chapterNumber)) tag = { text: "확인 완료", variant: "success" };
@@ -256,7 +275,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                 onClick={() => openChapter(c.chapterNumber)}
                 aria-current={active ? "true" : undefined}
                 className={cn(
-                  "flex items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-sm",
+                  "flex min-h-11 w-52 shrink-0 items-center gap-2 rounded-lg border px-2.5 py-2 text-left text-sm lg:w-auto lg:shrink",
                   active ? "border-primary bg-primary/10" : "border-transparent hover:bg-muted",
                 )}
               >
@@ -266,6 +285,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
               </button>
             );
           })}
+          </div>
         </nav>
 
         <main className="flex min-w-0 flex-col gap-3">
@@ -344,50 +364,62 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                 )}
               </div>
 
-              {currentChapter.paragraphs.map((paragraph, i) => {
-                const isSelected = selected.paragraphIndex === i && selected.chapterNumber === currentChapter.chapterNumber;
-                const edited = isEdited(currentChapter.chapterNumber, i);
-                const memoKind = memoByKey.get(`${currentChapter.chapterNumber}-${i}`);
-                const original = originalChapter?.paragraphs[i];
-                return (
-                  <div key={i} className={cn("flex flex-col gap-2 rounded-xl border bg-card px-4 py-3", isSelected ? "border-primary" : "border-border")}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-medium text-muted-foreground">문단 {i + 1}</span>
-                      {edited && <Badge variant="outline">수정됨</Badge>}
-                      {memoKind && <Badge variant="warning">Claude 메모 · {memoKind}</Badge>}
-                      <span className="flex-1" />
-                      {!isSelected && (
-                        <Button
-                          type="button"
-                          size="lg"
-                          variant="outline"
-                          aria-label={`문단 ${i + 1} 편집하고 Claude에 묻기`}
-                          onClick={() => setSelected({ chapterNumber: currentChapter.chapterNumber, paragraphIndex: i })}
-                        >
-                          편집 · Claude에 묻기
-                        </Button>
+              <div role="group" aria-label="문단 선택" className="flex gap-2 overflow-x-auto pb-1.5">
+                {currentChapter.paragraphs.map((paragraph, i) => {
+                  const on = i === paragraphIndex;
+                  const memoKind = memoByKey.get(`${currentChapter.chapterNumber}-${i}`);
+                  const edited = editedKeys.has(`${currentChapter.chapterNumber}-${i}`);
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      aria-pressed={on}
+                      aria-label={`문단 ${i + 1} 선택`}
+                      onClick={() => setSelected({ chapterNumber: currentChapter.chapterNumber, paragraphIndex: i })}
+                      className={cn(
+                        "flex min-h-14 w-44 shrink-0 flex-col gap-0.5 rounded-xl border-2 px-3 py-2 text-left",
+                        on ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-muted",
                       )}
-                    </div>
-                    {isSelected ? (
-                      <textarea
-                        aria-label={`문단 ${i + 1} 본문 수정`}
-                        value={paragraph}
-                        rows={5}
-                        disabled={locked}
-                        onChange={(e) => updateParagraph(currentChapter.chapterNumber, i, e.target.value)}
-                        className="w-full resize-y rounded-lg border-2 border-primary bg-background px-3 py-2.5 font-serif text-[17px] leading-loose outline-none disabled:opacity-60"
-                      />
-                    ) : (
-                      <p className="font-serif text-[17px] leading-loose">{paragraph}</p>
-                    )}
-                    {showOriginal && edited && original !== undefined && (
-                      <p className="border-t border-dashed border-border pt-2 text-sm leading-relaxed text-muted-foreground">
-                        <strong className="font-semibold">원본</strong> · <span className="line-through">{original}</span>
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
+                    >
+                      <span className="flex flex-wrap items-center gap-1 text-xs font-semibold text-muted-foreground">
+                        문단 {i + 1}
+                        {edited && <Badge variant="outline">수정됨</Badge>}
+                        {memoKind && <Badge variant="warning">메모</Badge>}
+                      </span>
+                      <span className="w-full truncate text-[13px] leading-snug">{paragraph.trim() || "(새 문단)"}</span>
+                    </button>
+                  );
+                })}
+                {isReview && (
+                  <button
+                    type="button"
+                    aria-label="맨 뒤에 새 문단 추가"
+                    disabled={locked}
+                    onClick={() => insertAt(currentChapter.chapterNumber, currentChapter.paragraphs.length)}
+                    className="min-h-14 shrink-0 rounded-xl border-2 border-dashed border-border px-3.5 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                  >
+                    + 문단 추가
+                  </button>
+                )}
+              </div>
+
+              <ParagraphWorkspace
+                key={`${currentChapter.chapterNumber}-${paragraphIndex}`}
+                mode={detail.mode}
+                id={detail.id}
+                chapters={chapters}
+                chapterNumber={currentChapter.chapterNumber}
+                paragraphIndex={paragraphIndex}
+                paragraphCount={currentChapter.paragraphs.length}
+                text={currentText}
+                originalText={originalText}
+                showOriginal={showOriginal}
+                disabled={locked}
+                onTextChange={(text) => updateParagraph(currentChapter.chapterNumber, paragraphIndex, text)}
+                onInsert={(where) => insertAt(currentChapter.chapterNumber, paragraphIndex + (where === "below" ? 1 : 0))}
+                onRemove={() => removeAt(currentChapter.chapterNumber, paragraphIndex)}
+                onMove={(delta) => moveBy(currentChapter.chapterNumber, paragraphIndex, delta)}
+              />
             </div>
           )}
         </main>
@@ -397,12 +429,15 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
           id={detail.id}
           view={view}
           chapters={chapters}
-          selected={selected}
+          currentText={currentText}
+          level={detail.level}
+          levelGuidance={detail.levelGuidance}
+          characters={detail.characters}
+          narrativeStyle={detail.narrativeStyle}
           memos={memos}
           memosLoading={memosLoading}
           memosError={memosError}
           disabled={locked}
-          onApplySuggestion={(target, after) => updateParagraph(target.chapterNumber, target.paragraphIndex, after)}
           onJump={jump}
         />
       </div>

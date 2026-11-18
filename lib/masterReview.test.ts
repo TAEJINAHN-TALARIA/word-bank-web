@@ -8,7 +8,14 @@ import {
   isValidChaptersInput,
   normalizeParagraphs,
   buildPublishedEdits,
+  averageSentenceLength,
+  insertParagraph,
+  removeParagraph,
+  moveParagraph,
+  locateMemos,
+  editedParagraphKeys,
   type MasterChapter,
+  type PreReviewItem,
 } from "./masterReview";
 
 function chapter(n: number, paragraphs: string[]): MasterChapter {
@@ -133,5 +140,72 @@ describe("buildPublishedEdits", () => {
   it("문단 안에 넣은 빈 줄은 문단으로 나눠서 보낸다", () => {
     const current = [chapter(1, ["a\n\nx", "b"]), baseline[1]];
     expect(buildPublishedEdits(current, baseline)).toEqual([{ num: 1, paragraphs: ["a", "x", "b"] }]);
+  });
+});
+
+describe("averageSentenceLength", () => {
+  it("공백을 뺀 글자 수로 문장당 평균 길이를 센다", () => {
+    // "가나다라마."(5) + "바사아자차."(5)
+    expect(averageSentenceLength("가나다라마. 바사아자차.")).toBe(5);
+  });
+
+  it("마침표 없이 이어진 글은 한 문장으로 센다", () => {
+    expect(averageSentenceLength("가나 다라 마바")).toBe(6);
+  });
+
+  it("줄바꿈도 문장 끝으로 보고, 빈 글은 0이다", () => {
+    expect(averageSentenceLength("가나\n다라마")).toBe(3);
+    expect(averageSentenceLength("   ")).toBe(0);
+  });
+});
+
+describe("문단 구조 편집 헬퍼", () => {
+  const chapters = [chapter(1, ["a", "b", "c"]), chapter(2, ["x"])];
+
+  it("insertParagraph: 지정 위치에 빈 문단을 넣고 다른 챕터는 그대로 둔다", () => {
+    const next = insertParagraph(chapters, 1, 1);
+    expect(next[0].paragraphs).toEqual(["a", "", "b", "c"]);
+    expect(next[1]).toBe(chapters[1]);
+    expect(chapters[0].paragraphs).toEqual(["a", "b", "c"]); // 입력은 바뀌지 않는다
+  });
+
+  it("insertParagraph: 맨 뒤(at === 길이)에도 넣을 수 있다", () => {
+    expect(insertParagraph(chapters, 2, 1)[1].paragraphs).toEqual(["x", ""]);
+  });
+
+  it("removeParagraph: 문단 하나를 지운다. 마지막 한 문단은 지울 수 없다", () => {
+    expect(removeParagraph(chapters, 1, 1)[0].paragraphs).toEqual(["a", "c"]);
+    expect(removeParagraph(chapters, 2, 0)[1].paragraphs).toEqual(["x"]);
+  });
+
+  it("moveParagraph: 두 문단의 자리를 바꾸고 범위를 벗어나면 그대로 둔다", () => {
+    expect(moveParagraph(chapters, 1, 0, 1)[0].paragraphs).toEqual(["b", "a", "c"]);
+    expect(moveParagraph(chapters, 1, 0, -1)[0].paragraphs).toEqual(["a", "b", "c"]);
+    expect(moveParagraph(chapters, 1, 2, 3)[0].paragraphs).toEqual(["a", "b", "c"]);
+  });
+});
+
+describe("locateMemos / editedParagraphKeys (문단 위치가 아니라 내용으로 추적)", () => {
+  const loaded = [chapter(1, ["a", "b", "c"])];
+  const memo = (paragraphIndex: number): PreReviewItem => ({ chapterNumber: 1, paragraphIndex, kind: "긴 문장", text: "t" });
+
+  it("메모가 가리키는 문단이 그대로면 현재 위치로 다시 매겨 남긴다 (앞에 문단을 넣어도 따라간다)", () => {
+    const current = [chapter(1, ["새", "a", "b", "c"])];
+    expect(locateMemos([memo(2)], loaded, current)).toEqual([{ chapterNumber: 1, paragraphIndex: 3, kind: "긴 문장", text: "t" }]);
+  });
+
+  it("그 문단을 고쳤거나 지웠으면 해결된 것으로 보고 뺀다", () => {
+    expect(locateMemos([memo(1)], loaded, [chapter(1, ["a", "B", "c"])])).toEqual([]);
+    expect(locateMemos([memo(1)], loaded, [chapter(1, ["a", "c"])])).toEqual([]);
+  });
+
+  it("원본 목록에 없는 문단만 수정된 문단으로 센다 (위치가 밀려도 안 어긋난다)", () => {
+    const original = [chapter(1, ["a", "b", "c"])];
+    const current = [chapter(1, ["새로 씀", "a", "B", "c"])];
+    expect([...editedParagraphKeys(current, original)].sort()).toEqual(["1-0", "1-2"]);
+  });
+
+  it("바뀐 게 없으면 비어 있다", () => {
+    expect(editedParagraphKeys(loaded, loaded).size).toBe(0);
   });
 });

@@ -137,3 +137,80 @@ export function isValidChaptersInput(value: unknown): value is MasterChapter[] {
   }
   return total <= MAX_TOTAL_CHARS;
 }
+
+// 공백을 뺀 글자 수 기준 문장당 평균 길이(story-generator readability.js의 한국어 목표 "문장당 자 수"와 같은 척도).
+// 마침표·물음표·느낌표와 줄바꿈을 문장 끝으로 본다. 레벨 문장 길이를 맞추라는 게 아니라 읽는 호흡을 보는 참고용이다.
+export function averageSentenceLength(text: string): number {
+  const sentences = text
+    .split(/[.!?]+\s*|\n+/)
+    .map((s) => s.replace(/\s/g, ""))
+    .filter(Boolean);
+  if (!sentences.length) return 0;
+  return Math.round(sentences.reduce((n, s) => n + s.length, 0) / sentences.length);
+}
+
+// ── 문단 구조 편집 (작업 공간의 추가·삭제·이동). 입력을 바꾸지 않고 새 배열을 돌려준다. ──
+
+function withParagraphs(
+  chapters: MasterChapter[],
+  chapterNumber: number,
+  update: (paragraphs: string[]) => string[],
+): MasterChapter[] {
+  return chapters.map((c) => (c.chapterNumber === chapterNumber ? { ...c, paragraphs: update(c.paragraphs) } : c));
+}
+
+export function insertParagraph(chapters: MasterChapter[], chapterNumber: number, at: number): MasterChapter[] {
+  return withParagraphs(chapters, chapterNumber, (p) => [...p.slice(0, at), "", ...p.slice(at)]);
+}
+
+// 챕터에는 문단이 하나 이상 있어야 하므로 마지막 한 문단은 지우지 않는다.
+export function removeParagraph(chapters: MasterChapter[], chapterNumber: number, index: number): MasterChapter[] {
+  return withParagraphs(chapters, chapterNumber, (p) => (p.length <= 1 ? p : p.filter((_, i) => i !== index)));
+}
+
+export function moveParagraph(chapters: MasterChapter[], chapterNumber: number, from: number, to: number): MasterChapter[] {
+  return withParagraphs(chapters, chapterNumber, (p) => {
+    if (from < 0 || from >= p.length || to < 0 || to >= p.length || from === to) return p;
+    const next = [...p];
+    [next[from], next[to]] = [next[to], next[from]];
+    return next;
+  });
+}
+
+// 문단을 추가·이동하면 위치(index)가 밀리므로, 메모와 "수정됨" 표시는 위치가 아니라 문단 내용으로 따라간다.
+
+/**
+ * 사전 검토 메모(불러온 본문 기준 위치)를 현재 본문 기준 위치로 다시 매긴다.
+ * 그 문단을 고치거나 지워서 내용이 더 이상 없으면 해결된 것으로 보고 뺀다.
+ */
+export function locateMemos(
+  memos: PreReviewItem[],
+  loaded: MasterChapter[],
+  current: MasterChapter[],
+): PreReviewItem[] {
+  const located: PreReviewItem[] = [];
+  for (const memo of memos) {
+    const loadedText = loaded.find((c) => c.chapterNumber === memo.chapterNumber)?.paragraphs[memo.paragraphIndex]?.trim();
+    if (!loadedText) continue;
+    const index = current
+      .find((c) => c.chapterNumber === memo.chapterNumber)
+      ?.paragraphs.findIndex((p) => p.trim() === loadedText);
+    if (index === undefined || index < 0) continue;
+    located.push({ ...memo, paragraphIndex: index });
+  }
+  return located;
+}
+
+/** 원본의 어느 문단과도 같지 않은 현재 문단의 키(`챕터-위치`) 집합. */
+export function editedParagraphKeys(current: MasterChapter[], original: MasterChapter[]): Set<string> {
+  const keys = new Set<string>();
+  for (const chapter of current) {
+    const originals = new Set(
+      (original.find((o) => o.chapterNumber === chapter.chapterNumber)?.paragraphs ?? []).map((p) => p.trim()),
+    );
+    chapter.paragraphs.forEach((p, i) => {
+      if (!originals.has(p.trim())) keys.add(`${chapter.chapterNumber}-${i}`);
+    });
+  }
+  return keys;
+}

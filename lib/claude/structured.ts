@@ -2,7 +2,6 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
-import { SYSTEM_PROMPT } from "./editing";
 
 export const CLAUDE_REVIEW_MODEL = "claude-opus-5-5";
 
@@ -32,6 +31,7 @@ function toCallError(err: unknown): ClaudeCallError {
 export async function callStructured<T extends z.ZodType>(input: {
   schema: T;
   effort: "low" | "medium" | "high";
+  system: string;
   context: string;
   task: string;
 }): Promise<z.output<T>> {
@@ -42,7 +42,7 @@ export async function callStructured<T extends z.ZodType>(input: {
       max_tokens: 16000,
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
-      system: SYSTEM_PROMPT,
+      system: input.system,
       output_config: { effort: input.effort, format: zodOutputFormat(input.schema) },
       messages: [
         {
