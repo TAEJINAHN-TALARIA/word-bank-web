@@ -53,6 +53,16 @@ describe("parseChatRequest", () => {
     expect(parseChatRequest({ ...valid, messages: [{ role: "user", content: "가".repeat(CHAT_LIMITS.maxMessageChars) }] }).ok).toBe(true);
   });
 
+  it("Claude 답변은 메시지당 한도를 넘게 길어도 받는다(합계 한도만 적용) — 긴 답변 한 번에 이후 전송이 막히면 안 된다", () => {
+    const long = "가".repeat(CHAT_LIMITS.maxMessageChars + 1000);
+    const conversation: ChatMessage[] = [
+      { role: "user", content: "자세히 설명해줘" },
+      { role: "assistant", content: long },
+      { role: "user", content: "고마워, 이어서 하나만 더" },
+    ];
+    expect(parseChatRequest({ ...valid, messages: conversation }).ok).toBe(true);
+  });
+
   it(`글자 수 합계가 ${CHAT_LIMITS.maxTotalChars}자를 넘으면 거절하고, 딱 그 합계는 받는다`, () => {
     // 4000자짜리를 user/assistant 번갈아, 첫·마지막이 user가 되도록 홀수 개로 만든다.
     const make = (count: number): ChatMessage[] =>

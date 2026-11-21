@@ -58,3 +58,26 @@ describe("readChatError", () => {
     expect(await readChatError(new Response(null, { status: 500 }))).toBe("요청에 실패했습니다 (500)");
   });
 });
+
+describe("readChatStream 종료 여부", () => {
+  const lines = (...list: ChatEvent[]) => encoder.encode(list.map(encodeEvent).join(""));
+
+  it("done 이벤트까지 받으면 true를 돌려준다", async () => {
+    const finished = await readChatStream(streamOf(lines({ t: "delta", text: "가" }, { t: "done" })), () => {});
+    expect(finished).toBe(true);
+  });
+
+  it("error 이벤트로 끝나도 서버가 끝을 알린 것이므로 true다", async () => {
+    const finished = await readChatStream(streamOf(lines({ t: "error", message: "x" })), () => {});
+    expect(finished).toBe(true);
+  });
+
+  it("done도 error도 없이 연결이 닫히면 false다(중간에 끊긴 응답)", async () => {
+    const finished = await readChatStream(streamOf(lines({ t: "delta", text: "가" })), () => {});
+    expect(finished).toBe(false);
+  });
+
+  it("본문이 없는 응답도 끝을 못 받았으니 false다", async () => {
+    expect(await readChatStream(new Response(null), () => {})).toBe(false);
+  });
+});

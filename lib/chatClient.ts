@@ -2,19 +2,26 @@
 import { createEventParser, type ChatEvent } from "./chatProtocol";
 
 // NDJSON 스트림을 읽으면서 완성된 이벤트마다 onEvent를 부른다.
-export async function readChatStream(response: Response, onEvent: (event: ChatEvent) => void): Promise<void> {
-  if (!response.body) return;
+// 서버가 끝을 알린(done 또는 error) 경우에만 true — 그 전에 연결이 닫히면(타임아웃·프록시 단절) false라서 잘린 답변을 알아챌 수 있다.
+export async function readChatStream(response: Response, onEvent: (event: ChatEvent) => void): Promise<boolean> {
+  if (!response.body) return false;
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   const feed = createEventParser();
+  let finished = false;
+  const handle = (event: ChatEvent) => {
+    if (event.t === "done" || event.t === "error") finished = true;
+    onEvent(event);
+  };
   for (;;) {
     const { value, done } = await reader.read();
     if (done) break;
     // stream: true — 한글 한 글자(3바이트)가 조각 경계에서 잘려도 다음 조각과 이어 해석한다.
-    for (const event of feed(decoder.decode(value, { stream: true }))) onEvent(event);
+    for (const event of feed(decoder.decode(value, { stream: true }))) handle(event);
   }
   const rest = decoder.decode();
-  if (rest) for (const event of feed(rest)) onEvent(event);
+  if (rest) for (const event of feed(rest)) handle(event);
+  return finished;
 }
 
 // 스트림이 시작되기 전의 오류 응답에서 화면에 보여줄 문구를 꺼낸다. JSON이 아닌 본문(게이트웨이 HTML 등)은 상태 코드로 안내한다.

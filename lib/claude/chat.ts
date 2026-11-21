@@ -23,7 +23,9 @@ function parseMessages(raw: unknown): ChatMessage[] | null {
     const role = item?.role;
     const content = item?.content;
     if ((role !== "user" && role !== "assistant") || typeof content !== "string") return null;
-    if (!content.trim() || content.length > CHAT_LIMITS.maxMessageChars) return null;
+    // 글자 수 한도는 편집자가 쓴 메시지에만 건다. Claude 답변은 max_tokens까지 길어질 수 있어 합계 한도로만 제한한다
+    // (답변에도 걸면 긴 답변 한 번에 이후 모든 전송이 막힌다).
+    if (!content.trim() || (role === "user" && content.length > CHAT_LIMITS.maxMessageChars)) return null;
     total += content.length;
     messages.push({ role, content });
   }

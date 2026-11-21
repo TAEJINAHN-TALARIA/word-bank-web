@@ -13,6 +13,7 @@ export type ChatEvent =
   | { t: "error"; message: string }
   | { t: "done" };
 
+// maxMessageChars는 편집자(user) 메시지에만 적용한다 — Claude 답변은 합계(maxTotalChars)로만 제한한다.
 export const CHAT_LIMITS = {
   maxMessages: 30,
   maxMessageChars: 4000,

@@ -61,10 +61,14 @@ export function useEditorChat({ mode, id }: { mode: "review" | "published"; id: 
           patchLast((turn) => ({ ...turn, error }));
           return;
         }
-        await readChatStream(response, (event) => {
+        const finished = await readChatStream(response, (event) => {
           if (event.t === "error") patchLast((turn) => ({ ...turn, error: event.message }));
           else patchLast((turn) => ({ ...turn, content: applyChatEvent(turn.content, event) }));
         });
+        // done도 error도 없이 연결이 닫힌 것은 중간에 끊긴 답변이다(300초 종료, 프록시 단절 등).
+        if (!finished && !controller.signal.aborted) {
+          patchLast((turn) => ({ ...turn, error: "응답이 중간에 끊겼습니다. 다시 시도해 주세요" }));
+        }
       } catch {
         // 멈추기로 끊은 것은 오류가 아니다. 받은 글은 그대로 둔다.
         if (!controller.signal.aborted) patchLast((turn) => ({ ...turn, error: "연결에 문제가 생겨 답을 받지 못했습니다" }));

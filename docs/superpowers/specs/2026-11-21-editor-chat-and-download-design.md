@@ -76,7 +76,7 @@
 
 **요청/응답.** `POST` 새 Route Handler(경로는 구현자가 정하되 `proxy.ts`의 로케일 리다이렉트에 걸리지 않는지 확인).
 - 요청: `{ mode, id, chapters, messages: { role: "user"|"assistant", content: string }[] }`
-- 서버 검증: 로그인(401) · `isValidChaptersInput` · `messages`가 비어 있지 않고 마지막이 user · 개수(≤30)·길이(메시지당 ≤4000자, 합계 상한) 초과 시 400 · 소설 없음 404. 오래된 대화는 클라이언트가 최근 N개만 보내도록 자른다.
+- 서버 검증: 로그인(401) · `isValidChaptersInput` · `messages`가 비어 있지 않고 마지막이 user · 개수(≤30)·길이(**편집자 메시지**당 ≤4000자, 합계 ≤60,000자 — Claude 답변은 max_tokens까지 길어질 수 있어 메시지당 한도를 걸지 않고 합계로만 제한) 초과 시 400 · 소설 없음 404. 오래된 대화는 클라이언트가 최근 N개만 보내도록 자른다.
 - Claude 호출: `beta.messages.stream`. 소설 본문(`buildStoryContext`)을 첫 user 메시지 앞쪽 블록에 `cache_control: ephemeral`로 두고 그 뒤에 대화 기록을 잇는다. `effort`는 `"medium"`(구현자가 조정 가능).
 - 응답: `application/x-ndjson`로 이벤트 줄 `{"t":"delta","text":"…"}` · `{"t":"reset"}` · `{"t":"error","message":"…"}` · `{"t":"done"}`. 스트림이 시작되기 전 실패는 JSON `{error}` + 4xx/5xx. **스트림 도중 실패는 `error` 이벤트로 알린다**(일반 텍스트 스트림으로는 구분이 안 되므로 줄 단위 이벤트로 한다). 거절(`refusal`)·길이 초과(`max_tokens`)는 기존 `ClaudeCallError`와 같은 문구로 `error` 이벤트.
 - **폴백 처리(`reset`)**: 서버 측 폴백이 응답 도중 일어나면 스트림에 `fallback` 콘텐츠 블록(`content_block_start`, `type: "fallback"`)이 끼어들고, 그 앞의 글은 이미 전송된 상태로 남으며 다른 모델이 이어서 쓴다(공식 문서는 앞의 부분 출력을 "미완성이니 버리라"고 안내). 서버는 `fallback` 블록을 보면 `reset` 이벤트를 보내고, 화면은 그 답변의 지금까지 글을 비운 뒤 이어지는 글만 보여준다. 폴백으로 거절이 해소되지 않아 체인이 끝나면 `stop_reason: "refusal"`이 오므로 위의 `error` 이벤트로 처리한다.
