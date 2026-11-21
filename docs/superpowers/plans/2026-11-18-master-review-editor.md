@@ -43,7 +43,7 @@
 **Files:** Create `lib/claude/client.ts`, `lib/claude/suggest.ts`, `lib/claude/reviewStory.ts`, `lib/claude/preReview.ts`(+ 각 `.test.ts`); Modify `package.json`(`@anthropic-ai/sdk`), `.env.example`(`ANTHROPIC_API_KEY`)
 
 - [x] 구현 전에 `claude-api` 스킬을 읽는다(모델 ID, `output_config.format` 구조화 출력, prompt caching, `fallbacks` 규칙이 바뀌는 영역).
-- [x] 모델 `claude-opus-5-5`. `thinking`은 생략(또는 adaptive), 제안은 `effort: medium`, 전체 점검·사전 검토는 `high`. `temperature` 등 샘플링 파라미터는 보내지 않는다.
+- [x] 모델 `claude-sonnet-5-5`. `thinking`은 생략(또는 adaptive), 제안은 `effort: medium`, 전체 점검·사전 검토는 `high`. `temperature` 등 샘플링 파라미터는 보내지 않는다.
 - [x] 소설 본문+설정집을 프롬프트 앞부분에 두고 `cache_control`로 캐시한다(같은 소설을 여러 요청이 재사용). 서버 측 `fallbacks`(`server-side-fallback-2026-07-01`, `"default"`)를 켜고, 켰다는 사실을 최종 보고에 적는다.
 - [x] 세 함수의 프롬프트 공통 지시: 줄거리·사실 관계·인물·시점·서술 문체 불변, 인물별 말투 유지, `levelGuidance`의 문장 길이 기준 준수. 출력은 JSON 스키마(제안: `{reason, after}` / 전체 점검: `{title, items[]}` / 사전 검토: `items[{chapterNumber, paragraphIndex, kind, text}]`).
 - [x] 순수 로직 테스트(SDK mock): 응답 파싱·검증(없는 문단 위치 거절, `after`가 비었으면 거절), 프롬프트 조립에 설정집·레벨 지시가 들어가는지, `stop_reason: "refusal"` 처리.

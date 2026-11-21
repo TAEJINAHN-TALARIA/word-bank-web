@@ -3,7 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 
-export const CLAUDE_REVIEW_MODEL = "claude-opus-5-5";
+export const CLAUDE_REVIEW_MODEL = "claude-sonnet-5-5";
 
 let client: Anthropic | undefined;
 function getClient(): Anthropic {
