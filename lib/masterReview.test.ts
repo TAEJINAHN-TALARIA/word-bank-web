@@ -199,6 +199,33 @@ describe("locateMemos / editedParagraphKeys (문단 위치가 아니라 내용�
     expect(locateMemos([memo(1)], loaded, [chapter(1, ["a", "c"])])).toEqual([]);
   });
 
+  describe("문단을 나누거나 합쳐도 메모가 남는다", () => {
+    const merged = [chapter(1, ["a b", "c"])];
+
+    it("나눈 문단의 메모는 첫 조각에 붙는다", () => {
+      expect(locateMemos([memo(0)], merged, [chapter(1, ["a", "b", "c"])])).toEqual([
+        { chapterNumber: 1, paragraphIndex: 0, kind: "긴 문장", text: "t" },
+      ]);
+    });
+
+    it("앞에 문단이 생기고 나눠져도 첫 조각의 현재 위치를 따라간다", () => {
+      expect(locateMemos([memo(0)], merged, [chapter(1, ["x", "a", "b", "c"])])[0].paragraphIndex).toBe(1);
+    });
+
+    it("합친 문단의 메모는 합쳐진 문단에 붙는다 (메모가 첫 문단에 있었든 둘째에 있었든)", () => {
+      expect(locateMemos([memo(0)], merged, [chapter(1, ["a b c"])])[0].paragraphIndex).toBe(0);
+      expect(locateMemos([memo(1)], merged, [chapter(1, ["a b c"])])[0].paragraphIndex).toBe(0);
+    });
+
+    it("나눈 뒤 조각을 고쳐서 원래 문단이 더 이상 복원되지 않으면 해결된 것으로 보고 뺀다", () => {
+      expect(locateMemos([memo(0)], merged, [chapter(1, ["a", "B", "c"])])).toEqual([]);
+    });
+
+    it("구조를 바꾸지 않은 다른 문단의 메모는 그대로 제 위치를 지킨다", () => {
+      expect(locateMemos([memo(1)], merged, [chapter(1, ["a", "b", "c"])])[0].paragraphIndex).toBe(2);
+    });
+  });
+
   it("원본 목록에 없는 문단만 수정된 문단으로 센다 (위치가 밀려도 안 어긋난다)", () => {
     const original = [chapter(1, ["a", "b", "c"])];
     const current = [chapter(1, ["새로 씀", "a", "B", "c"])];

@@ -179,8 +179,29 @@ export function moveParagraph(chapters: MasterChapter[], chapterNumber: number, 
 
 // 문단을 추가·이동하면 위치(index)가 밀리므로, 메모와 "수정됨" 표시는 위치가 아니라 문단 내용으로 따라간다.
 
+const squash = (s: string) => s.replace(/\s/g, "");
+
+// 불러온 문단이 현재 본문 어디에 있는지 찾는다. 문단을 나누거나 합쳐도 글자는 그대로이므로 공백을 뺀 글자로 비교한다.
+// ① 그대로 있으면 그 위치, ② 나뉘었으면(이어 붙이면 원래 문단이 되는 연속 문단) 첫 조각, ③ 합쳐졌으면 그 문단을 통째로 담은 문단.
+function findMemoParagraph(loadedText: string, current: string[]): number {
+  const exact = current.findIndex((p) => p.trim() === loadedText);
+  if (exact >= 0) return exact;
+
+  const target = squash(loadedText);
+  for (let i = 0; i < current.length; i++) {
+    let joined = "";
+    for (let j = i; j < current.length; j++) {
+      joined += squash(current[j]);
+      if (joined === target) return i;
+      if (joined.length >= target.length) break;
+    }
+  }
+  return current.findIndex((p) => squash(p).includes(target));
+}
+
 /**
  * 사전 검토 메모(불러온 본문 기준 위치)를 현재 본문 기준 위치로 다시 매긴다.
+ * 문단을 나누면 메모는 첫 조각에, 합치면 합쳐진 문단에 붙는다.
  * 그 문단을 고치거나 지워서 내용이 더 이상 없으면 해결된 것으로 보고 뺀다.
  */
 export function locateMemos(
@@ -192,10 +213,10 @@ export function locateMemos(
   for (const memo of memos) {
     const loadedText = loaded.find((c) => c.chapterNumber === memo.chapterNumber)?.paragraphs[memo.paragraphIndex]?.trim();
     if (!loadedText) continue;
-    const index = current
-      .find((c) => c.chapterNumber === memo.chapterNumber)
-      ?.paragraphs.findIndex((p) => p.trim() === loadedText);
-    if (index === undefined || index < 0) continue;
+    const paragraphs = current.find((c) => c.chapterNumber === memo.chapterNumber)?.paragraphs;
+    if (!paragraphs) continue;
+    const index = findMemoParagraph(loadedText, paragraphs);
+    if (index < 0) continue;
     located.push({ ...memo, paragraphIndex: index });
   }
   return located;
