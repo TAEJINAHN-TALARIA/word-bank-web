@@ -28,6 +28,9 @@ import { InlineError } from "@/components/admin/InlineError";
 import { ClaudePanel } from "@/components/admin/ClaudePanel";
 import { FullReadView } from "@/components/admin/FullReadView";
 import { ParagraphWorkspace } from "@/components/admin/ParagraphWorkspace";
+import { DownloadButton } from "@/components/admin/DownloadButton";
+import { downloadTextFile, printHtml } from "@/components/admin/manuscriptDownload";
+import { buildManuscriptText, buildPrintHtml, manuscriptFileName } from "@/lib/manuscriptExport";
 import { StructureSuggestions } from "@/components/admin/StructureSuggestions";
 import { cn } from "@/lib/utils";
 
@@ -203,6 +206,16 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
     setApproved(true);
   }
 
+  // 저장 여부와 상관없이 지금 화면의 원고(chapters)를 내려받는다.
+  function handleDownload(format: "txt" | "pdf") {
+    const fileName = manuscriptFileName(detail.title, detail.id, format);
+    if (format === "txt") {
+      downloadTextFile(fileName, buildManuscriptText({ title: detail.title, chapters }));
+    } else {
+      printHtml(buildPrintHtml({ title: detail.title, level: detail.level, chapters }), fileName.replace(/\.pdf$/, ""));
+    }
+  }
+
   if (!currentChapter) return <InlineError message="챕터가 없는 원고입니다" />;
 
   return (
@@ -323,6 +336,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                 </Button>
               </>
             )}
+            <DownloadButton onSelect={handleDownload} />
             <Button type="button" size="lg" variant="outline" disabled={locked || !dirty} onClick={handleSave}>
               {busy === "save" ? "저장 중…" : savedAt && !dirty ? (isReview ? "임시 저장됨" : "저장됨") : isReview ? "임시 저장" : "저장"}
             </Button>
