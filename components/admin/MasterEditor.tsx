@@ -28,6 +28,7 @@ import { InlineError } from "@/components/admin/InlineError";
 import { ClaudePanel } from "@/components/admin/ClaudePanel";
 import { FullReadView } from "@/components/admin/FullReadView";
 import { ParagraphWorkspace } from "@/components/admin/ParagraphWorkspace";
+import { StructureSuggestions } from "@/components/admin/StructureSuggestions";
 import { cn } from "@/lib/utils";
 
 type Selected = { chapterNumber: number; paragraphIndex: number };
@@ -409,6 +410,21 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                   </button>
                 )}
               </div>
+
+              {isReview && (
+                <StructureSuggestions
+                  key={currentChapter.chapterNumber}
+                  mode={detail.mode}
+                  id={detail.id}
+                  chapters={chapters}
+                  chapterNumber={currentChapter.chapterNumber}
+                  disabled={locked}
+                  onApply={(paragraphs) => {
+                    updateChapter(currentChapter.chapterNumber, (c) => ({ ...c, paragraphs }));
+                    setSelected({ chapterNumber: currentChapter.chapterNumber, paragraphIndex: 0 });
+                  }}
+                />
+              )}
 
               <ParagraphWorkspace
                 key={`${currentChapter.chapterNumber}-${paragraphIndex}`}
