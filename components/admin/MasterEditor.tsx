@@ -451,6 +451,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
           mode={detail.mode}
           id={detail.id}
           view={view}
+          focus={view === "edit" ? { chapterNumber: currentChapter.chapterNumber, paragraphIndex } : null}
           chapters={chapters}
           currentText={currentText}
           level={detail.level}
