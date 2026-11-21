@@ -18,6 +18,8 @@ export type PendingReviewItem = {
   gateStatus: string;
   ruleBaseWarnings: string[];
   llmEvalReasons: string[];
+  // 마스터 검토 게이트 도입 전에 끝난 세션은 false — 목록에서 "마스터 미검토" 배지를 붙인다.
+  masterReviewed: boolean;
 };
 
 export async function fetchPendingReviews(): Promise<PendingReviewItem[]> {
@@ -65,4 +67,83 @@ export async function recallStory(sessionId: string, target: string): Promise<vo
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error ?? `철회 실패 (${response.status})`);
   }
+}
+
+// ── 마스터 검토 / 게시본 편집 (story-generator의 adminHandlers.js) ──
+
+async function postAdmin(
+  path: string,
+  body: unknown,
+  failureLabel: string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown>> {
+  const baseUrl = requireEnv(BASE_URL, "STORY_GENERATOR_FUNCTIONS_BASE_URL");
+  const secret = requireEnv(SHARED_SECRET, "ADMIN_API_SHARED_SECRET");
+
+  const response = await fetch(`${baseUrl}/${path}`, {
+    method: "POST",
+    headers: { "x-admin-api-key": secret, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    signal,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    // 승인 시 규칙 검사 실패는 failures 목록을 함께 내려준다 — 사유를 그대로 보여준다.
+    const failures = Array.isArray(data.failures) ? `: ${data.failures.join(" / ")}` : "";
+    throw new Error(`${data.error ?? `${failureLabel} (${response.status})`}${failures}`);
+  }
+  return data;
+}
+
+export type MasterEdit = { chapterNumber: number; chapterTitle: string; body: string };
+
+export async function saveMasterReview(
+  sessionId: string,
+  edits: MasterEdit[],
+  confirmedChapters: number[],
+): Promise<void> {
+  await postAdmin("adminSaveMasterReview", { sessionId, edits, confirmedChapters }, "저장 실패");
+}
+
+export type ApproveMasterReviewResult = { resume: "batch" | "onDemand"; warnings: string[] };
+
+export async function approveMasterReview(sessionId: string): Promise<ApproveMasterReviewResult> {
+  const data = await postAdmin("adminApproveMasterReview", { sessionId }, "승인 실패");
+  return {
+    resume: data.resume === "onDemand" ? "onDemand" : "batch",
+    warnings: Array.isArray(data.warnings) ? (data.warnings as string[]) : [],
+  };
+}
+
+const RESUME_ON_DEMAND_WAIT_MS = 5000;
+
+/**
+ * 승인된 온디맨드 세션의 나머지 단계(삽화 → 번역 → 게이트)는 수 분~수십 분 걸려서 응답을 기다리지 않는다.
+ * 짧게 기다려도 응답이 없으면 "시작됨"으로 본다 — 서버가 클라이언트 연결이 끊긴 뒤에도 끝까지 도는지는
+ * 배포 환경에서 확인이 필요하다(스펙 Open Question 1). 확인 전에는 CLI `scripts/resume-now.mjs`가 대체 경로다.
+ */
+export async function resumeOnDemand(sessionId: string): Promise<"started" | "finished"> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RESUME_ON_DEMAND_WAIT_MS);
+  try {
+    await postAdmin("resumeOnDemand", { sessionId }, "재개 실패", controller.signal);
+    return "finished";
+  } catch (err) {
+    if (controller.signal.aborted) return "started";
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export type PublishedEdit = { num: number; paragraphs: string[] };
+export type EditPublishedStoryResult = { editedNums: number[]; warnings: string[]; contentVersion: number };
+
+export async function editPublishedStory(docId: string, edits: PublishedEdit[]): Promise<EditPublishedStoryResult> {
+  const data = await postAdmin("adminEditPublishedStory", { docId, edits }, "게시본 저장 실패");
+  return {
+    editedNums: Array.isArray(data.editedNums) ? (data.editedNums as number[]) : [],
+    warnings: Array.isArray(data.warnings) ? (data.warnings as string[]) : [],
+    contentVersion: typeof data.contentVersion === "number" ? data.contentVersion : 0,
+  };
 }

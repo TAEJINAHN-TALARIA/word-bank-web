@@ -1,7 +1,11 @@
 import { notFound } from "next/navigation";
 import { getPipelineSessionDetail } from "@/lib/data/pipelineSessions";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { statusBadgeVariant, statusBorderClass } from "@/lib/status";
+import { sessionStage } from "@/lib/sessionStage";
+import { cn } from "@/lib/utils";
 import { LabeledList } from "@/components/admin/LabeledList";
 
 export default async function GenerationDetailPage({
@@ -12,13 +16,22 @@ export default async function GenerationDetailPage({
   const { sessionId } = await params;
   const session = await getPipelineSessionDetail(sessionId);
   if (!session) notFound();
+  const stage = sessionStage(session.status, session.id);
 
   return (
     <div className="flex flex-col gap-8">
       <div>
         <h1 className="font-mono text-xl font-semibold tracking-tight">{session.id}</h1>
-        <div className="mt-2">
-          <Badge variant={statusBadgeVariant(session.status)}>{session.status}</Badge>
+        <div className="mt-2 flex flex-wrap items-center gap-3">
+          <Badge variant={stage.variant}>{stage.label}</Badge>
+          {stage.next && (
+            <Link href={stage.next.href} className={cn(buttonVariants({ size: "sm" }))}>
+              {stage.next.label}
+            </Link>
+          )}
+          <Link href="/admin/generation" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+            생성 현황으로
+          </Link>
         </div>
       </div>
 

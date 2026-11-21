@@ -21,6 +21,7 @@ export async function publishStoryAction(
     return { error: err instanceof Error ? err.message : "게시 실패" };
   }
   revalidatePath("/admin/review");
+  revalidatePath("/admin/published");
   return {};
 }
 
@@ -52,6 +53,7 @@ export async function recallStoryAction(
     return { error: err instanceof Error ? err.message : "철회 실패" };
   }
   revalidatePath("/admin/review");
+  revalidatePath("/admin/published");
   return {};
 }
 
@@ -77,5 +79,6 @@ export async function publishStoriesAction(
   });
 
   revalidatePath("/admin/review");
+  revalidatePath("/admin/published");
   return mapped;
 }

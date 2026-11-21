@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import Link from "next/link";
 import type { PublishedStory } from "@/lib/data/stories";
 import { fetchMorePublishedStoriesAction, recallStoryAction } from "@/lib/actions/adminStoryActions";
@@ -22,14 +22,12 @@ import { cn } from "@/lib/utils";
 export function PublishedStoriesTable({
   initialStories,
   initialCursor,
-  onCountChange,
 }: {
   initialStories: PublishedStory[];
   initialCursor: string | null;
-  onCountChange: (count: number) => void;
 }) {
   // `initialStories`는 서버 컴포넌트가 매 렌더마다 내려주는 1페이지(source of truth)다.
-  // publish/recall 후 revalidatePath("/admin/review")로 새 prop이 오면 아래에서
+  // publish/recall 후 revalidatePath("/admin/published")로 새 prop이 오면 아래에서
   // "렌더 중 상태 조정" 패턴으로 로컬 오버레이(removedKeys/extraPages)를 리셋해
   // 목록이 stale해지지 않게 한다.
   const [removedKeys, setRemovedKeys] = useState<Set<string>>(new Set());
@@ -53,10 +51,6 @@ export function PublishedStoriesTable({
   }
 
   const stories = [...initialStories, ...extraPages].filter((s) => !removedKeys.has(s.id));
-
-  useEffect(() => {
-    onCountChange(stories.length);
-  }, [stories.length, onCountChange]);
 
   function toggleGroupExpanded(key: string) {
     setExpandedKeys((prev) => {
@@ -138,7 +132,7 @@ export function PublishedStoriesTable({
                   items.map((story) => (
                     <TableRow key={story.id}>
                       <TableCell className={cn("whitespace-normal font-medium", label && "pl-6")}>
-                        <Link href={`/admin/review/${story.id}`} className="underline-offset-4 hover:underline">
+                        <Link href={`/admin/published/${story.id}`} className="underline-offset-4 hover:underline">
                           {story.title ?? "(제목 없음)"}
                         </Link>
                       </TableCell>
@@ -148,8 +142,16 @@ export function PublishedStoriesTable({
                       <TableCell>{story.chapterCount}개</TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          {story.lang === "ko" && (
+                            <Link
+                              href={`/admin/edit/published/${story.id}`}
+                              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+                            >
+                              편집
+                            </Link>
+                          )}
                           <a
-                            href={`/admin/review/${story.id}/download`}
+                            href={`/admin/published/${story.id}/download`}
                             download
                             className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
                           >

@@ -27,15 +27,31 @@ export default async function StoryContentPage({
             {story.lang} · {story.level}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {story.lang === "ko" && (
+            <Link
+              href={`/admin/edit/published/${docId}`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              표현 수정
+            </Link>
+          )}
+          {story.sessionId && (
+            <Link
+              href={`/admin/generation/${story.sessionId}`}
+              className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
+            >
+              생성 상세
+            </Link>
+          )}
           <a
-            href={`/admin/review/${docId}/download`}
+            href={`/admin/published/${docId}/download`}
             download
             className={cn(buttonVariants({ variant: "outline", size: "sm" }))}
           >
             다운로드
           </a>
-          <Link href="/admin/review" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
+          <Link href="/admin/published" className={cn(buttonVariants({ variant: "ghost", size: "sm" }))}>
             목록으로
           </Link>
         </div>

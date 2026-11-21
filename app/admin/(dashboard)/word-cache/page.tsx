@@ -60,7 +60,7 @@ export default async function WordCacheStatsPage() {
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">단어캐시 현황</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">단어 캐시</h1>
         <p className="text-sm text-muted-foreground">
           언어쌍별 검색 트렌드와 캐시 적재 현황을 확인하세요. 무의미 검색 비율과 locale 분포는{" "}
           {INSTRUMENTATION_START_DATE} 계측 시작 이후 데이터부터 반영됩니다.

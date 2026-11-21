@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import type { PendingReviewItem } from "@/lib/admin-functions/storyGenerator";
 import { publishStoryAction, publishStoriesAction } from "@/lib/actions/adminStoryActions";
 import { groupBySession, getGroupLabel } from "@/lib/reviewGrouping";
@@ -27,13 +27,7 @@ function itemKey(item: { sessionId: string; target: string }) {
 
 type SelectionState = "all" | "some" | "none";
 
-export function PendingReviewsTable({
-  initialItems,
-  onCountChange,
-}: {
-  initialItems: PendingReviewItem[];
-  onCountChange: (count: number) => void;
-}) {
+export function PendingReviewsTable({ initialItems }: { initialItems: PendingReviewItem[] }) {
   // `initialItems`는 서버 컴포넌트가 매 렌더마다 내려주는 목록(source of truth)이다.
   // publish 후 revalidatePath("/admin/review")로 새 prop이 오면 아래에서
   // "렌더 중 상태 조정" 패턴으로 removedKeys 오버레이를 리셋해 목록이 stale해지지 않게 한다.
@@ -56,10 +50,6 @@ export function PendingReviewsTable({
   }
 
   const items = initialItems.filter((i) => !removedKeys.has(itemKey(i)));
-
-  useEffect(() => {
-    onCountChange(items.length);
-  }, [items.length, onCountChange]);
 
   function toggleSelected(key: string) {
     setSelected((prev) => {
@@ -287,6 +277,11 @@ export function PendingReviewsTable({
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <Badge variant={statusBadgeVariant(item.gateStatus)}>{item.gateStatus}</Badge>
+                            {item.masterReviewed === false && (
+                              <Badge variant="warning" title="마스터 검토 게이트가 생기기 전에 만들어져 사람이 읽고 승인하지 않은 소설입니다">
+                                마스터 미검토
+                              </Badge>
+                            )}
                             {failureByKey.has(key2) && (
                               <InlineError message={`게시 실패: ${failureByKey.get(key2)}`} />
                             )}
