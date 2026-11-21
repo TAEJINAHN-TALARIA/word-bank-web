@@ -2,11 +2,14 @@ import "server-only";
 import { getAdminFirestore } from "@/lib/firebase/admin";
 import {
   bodyToParagraphs,
+  isValidDraftEdits,
+  PUBLISHED_DRAFTS_COLLECTION,
   type CharacterInfo,
   type EditorDetail,
   type LevelGuidance,
   type MasterChapter,
   type PreReviewItem,
+  type PublishedDraft,
 } from "@/lib/masterReview";
 
 // story-generator의 MASTER_REVIEW_STATUS(src/pipeline/masterReview.js)와 같은 값.
@@ -157,14 +160,28 @@ export async function getMasterReview(sessionId: string): Promise<EditorDetail |
   return buildMasterReviewDetail({ sessionId, session, layer1, layer4, layer4Original });
 }
 
+// 저장된 초안 문서 → 화면 타입. 초안을 만든 뒤 게시 버전이 바뀌었으면(반영 뒤 남은 초안 포함) stale이다.
+export function mapPublishedDraft(raw: unknown, currentContentVersion: number): PublishedDraft | null {
+  if (!raw || typeof raw !== "object") return null;
+  const { edits, baseContentVersion, updatedAt } = raw as Record<string, unknown>;
+  if (!isValidDraftEdits(edits) || typeof baseContentVersion !== "number") return null;
+  let updatedAtMs = 0;
+  if (updatedAt instanceof Date) updatedAtMs = updatedAt.getTime();
+  else if (typeof (updatedAt as { toMillis?: unknown } | undefined)?.toMillis === "function") {
+    updatedAtMs = (updatedAt as { toMillis: () => number }).toMillis();
+  }
+  return { edits, baseContentVersion, updatedAt: updatedAtMs, stale: baseContentVersion !== currentContentVersion };
+}
+
 // 게시된 소설 편집 화면용. 설정집(인물 말투 등)은 마스터에서 만들어진 게시본일 때만 세션에서 가져온다.
 export async function getPublishedStoryForEdit(
   docId: string,
 ): Promise<{ lang: string; detail: EditorDetail } | null> {
   const db = getAdminFirestore();
-  const [storySnap, contentSnap] = await Promise.all([
+  const [storySnap, contentSnap, draftSnap] = await Promise.all([
     db.collection("stories").doc(docId).get(),
     db.collection("storyContent").doc(docId).get(),
+    db.collection(PUBLISHED_DRAFTS_COLLECTION).doc(docId).get(),
   ]);
   if (!storySnap.exists || !contentSnap.exists) return null;
   const story = storySnap.data() as Record<string, unknown>;
@@ -183,6 +200,7 @@ export async function getPublishedStoryForEdit(
     }))
     .sort((a, b) => a.chapterNumber - b.chapterNumber);
 
+  const contentVersion = typeof story.contentVersion === "number" ? story.contentVersion : 0;
   const sessionId = typeof story.sessionId === "string" ? story.sessionId : null;
   const layer1 = sessionId && story.target === "master" ? await readLayerOutput(sessionId, "layer1") : null;
 
@@ -202,6 +220,8 @@ export async function getPublishedStoryForEdit(
       confirmedChapters: [],
       gateNote: null,
       preReview: null,
+      contentVersion,
+      draft: mapPublishedDraft(draftSnap.exists ? draftSnap.data() : undefined, contentVersion),
     },
   };
 }

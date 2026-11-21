@@ -22,7 +22,7 @@ import {
   type StoryReviewResult,
 } from "@/lib/claude/editor";
 import type { Idea, IdeaDirection, PolishChange, RejectedChange, StoryReviewKind, StructureChange } from "@/lib/claude/editing";
-import type { PreReviewItem } from "@/lib/masterReview";
+import { PUBLISHED_DRAFTS_COLLECTION, type PreReviewItem } from "@/lib/masterReview";
 
 /**
  * Next.js는 프로덕션에서 Server Action이 throw한 에러 메시지를 마스킹한다.
@@ -84,6 +84,12 @@ export async function editPublishedStoryAction(input: {
   if (!(await getAdminSession())) return LOGIN_REQUIRED;
   try {
     const result = await editPublishedStory(input.docId, input.edits);
+    try {
+      await getAdminFirestore().collection(PUBLISHED_DRAFTS_COLLECTION).doc(input.docId).delete();
+    } catch {
+      // 반영한 글의 초안은 더 필요 없다. 지우기가 실패해도 반영은 이미 끝났으니 되돌리지 않는다
+      // (남은 초안은 다음에 열 때 게시 버전이 달라 stale로 취급된다).
+    }
     revalidatePath("/admin/edit");
     return { warnings: result.warnings, contentVersion: result.contentVersion };
   } catch (err) {

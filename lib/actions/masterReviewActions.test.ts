@@ -114,6 +114,36 @@ describe("editPublishedStoryAction", () => {
     });
     expect(cache.revalidatePath).toHaveBeenCalledWith("/admin/edit");
   });
+
+  // "컬렉션/id" 삭제 호출을 기록하는 가짜 Firestore.
+  function fakeDraftDb() {
+    const del = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(admin.getAdminFirestore).mockReturnValue({
+      collection: (c: string) => ({ doc: (id: string) => ({ delete: () => del(`${c}/${id}`) }) }),
+    } as never);
+    return del;
+  }
+
+  it("반영에 성공하면 그 소설의 초안을 함께 지운다", async () => {
+    const del = fakeDraftDb();
+    vi.mocked(generator.editPublishedStory).mockResolvedValueOnce({ editedNums: [2], warnings: [], contentVersion: 3 });
+    expect(await editPublishedStoryAction({ docId: "d1", edits: [{ num: 2, paragraphs: ["a"] }] })).toEqual({ warnings: [], contentVersion: 3 });
+    expect(del).toHaveBeenCalledWith("publishedDrafts/d1");
+  });
+
+  it("초안 삭제가 실패해도 반영 결과는 성공으로 돌려준다", async () => {
+    const del = fakeDraftDb();
+    del.mockRejectedValueOnce(new Error("삭제 실패"));
+    vi.mocked(generator.editPublishedStory).mockResolvedValueOnce({ editedNums: [2], warnings: [], contentVersion: 3 });
+    expect(await editPublishedStoryAction({ docId: "d1", edits: [{ num: 2, paragraphs: ["a"] }] })).toEqual({ warnings: [], contentVersion: 3 });
+  });
+
+  it("반영이 실패하면 초안을 지우지 않는다", async () => {
+    const del = fakeDraftDb();
+    vi.mocked(generator.editPublishedStory).mockRejectedValueOnce(new Error("규칙 검사 실패"));
+    expect(await editPublishedStoryAction({ docId: "d1", edits: [{ num: 2, paragraphs: ["a"] }] })).toEqual({ error: "규칙 검사 실패" });
+    expect(del).not.toHaveBeenCalled();
+  });
 });
 
 describe("Claude 액션", () => {
