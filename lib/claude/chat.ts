@@ -1,6 +1,10 @@
-// 편집 화면 Claude 대화의 요청 검증. 스트리밍 호출은 같은 파일의 streamChat이 맡는다.
-import { CHAT_LIMITS, type ChatMessage } from "@/lib/chatProtocol";
+// 편집 화면 Claude 대화 — 요청 검증(parseChatRequest)과 스트리밍 호출(streamChat).
+import "server-only";
+import { CHAT_LIMITS, type ChatEvent, type ChatMessage } from "@/lib/chatProtocol";
 import { isValidChaptersInput, type MasterChapter } from "@/lib/masterReview";
+import { buildChatSystemPrompt, buildStoryContext } from "./editing";
+import type { EditorContextInput } from "./editor";
+import { streamConversation } from "./structured";
 
 export type ChatRequest = {
   mode: "review" | "published";
@@ -38,4 +42,17 @@ export function parseChatRequest(body: unknown): { ok: true; value: ChatRequest 
   const messages = parseMessages(input.messages);
   if (!messages) return { ok: false, error: "대화 내용이 올바르지 않거나 너무 깁니다" };
   return { ok: true, value: { mode: input.mode, id: input.id, chapters: input.chapters, messages } };
+}
+
+// 편집 중인 현재 본문 전체(context)와 대화 기록으로 Claude에게 답을 스트리밍으로 받는다. 본문은 바꾸지 않는다.
+export function streamChat(
+  input: EditorContextInput & { mode: "review" | "published"; messages: ChatMessage[]; signal?: AbortSignal },
+): AsyncGenerator<ChatEvent> {
+  return streamConversation({
+    system: buildChatSystemPrompt(input.mode),
+    context: buildStoryContext(input),
+    messages: input.messages,
+    effort: "medium",
+    signal: input.signal,
+  });
 }

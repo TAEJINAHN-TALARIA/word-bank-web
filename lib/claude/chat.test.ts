@@ -1,6 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { parseChatRequest } from "./chat";
-import { CHAT_LIMITS, type ChatMessage } from "@/lib/chatProtocol";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("server-only", () => ({}));
+vi.mock("./structured");
+
+import { parseChatRequest, streamChat } from "./chat";
+import { buildChatSystemPrompt } from "./editing";
+import * as structured from "./structured";
+import { CHAT_LIMITS, type ChatEvent, type ChatMessage } from "@/lib/chatProtocol";
 
 const chapters = [{ chapterNumber: 1, chapterTitle: "첫째", paragraphs: ["하린은 문을 열었다."] }];
 const messages: ChatMessage[] = [{ role: "user", content: "[지금 보는 곳: 1장 1문단]\n이 문단 어때?" }];
@@ -56,5 +62,31 @@ describe("parseChatRequest", () => {
       }));
     expect(parseChatRequest({ ...valid, messages: make(15) }).ok).toBe(true); // 60,000자
     expectRejected({ ...valid, messages: make(17) }); // 68,000자
+  });
+});
+
+describe("streamChat", () => {
+  const base = { title: "제목", level: "Lv3", chapters, characters: [], narrativeStyle: "-했다체", levelGuidance: null };
+
+  it("모드별 대화 프롬프트와 소설 본문을 담아 streamConversation을 부르고, 그 이벤트를 그대로 내보낸다", async () => {
+    const events: ChatEvent[] = [{ t: "delta", text: "가" }, { t: "done" }];
+    vi.mocked(structured.streamConversation).mockReturnValueOnce(
+      (async function* () {
+        yield* events;
+      })(),
+    );
+    const signal = new AbortController().signal;
+
+    const out: ChatEvent[] = [];
+    for await (const event of streamChat({ ...base, mode: "review", messages, signal })) out.push(event);
+
+    expect(out).toEqual(events);
+    const call = vi.mocked(structured.streamConversation).mock.calls[0][0];
+    expect(call.system).toBe(buildChatSystemPrompt("review"));
+    expect(call.context).toContain("[소설 본문]");
+    expect(call.context).toContain("하린은 문을 열었다.");
+    expect(call.effort).toBe("medium");
+    expect(call.messages).toBe(messages);
+    expect(call.signal).toBe(signal);
   });
 });

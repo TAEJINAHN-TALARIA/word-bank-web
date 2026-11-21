@@ -2,6 +2,8 @@ import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
+import type { ChatEvent, ChatMessage } from "@/lib/chatProtocol";
+import { buildChatMessages } from "./chatMessages";
 
 export const CLAUDE_REVIEW_MODEL = "claude-sonnet-5-5";
 
@@ -62,4 +64,71 @@ export async function callStructured<T extends z.ZodType>(input: {
   if (response.stop_reason === "max_tokens") throw new ClaudeCallError("응답이 길어 중간에 잘렸습니다. 요청 범위를 줄여 다시 시도해 주세요");
   if (!response.parsed_output) throw new ClaudeCallError("Claude 응답을 해석하지 못했습니다");
   return response.parsed_output as z.output<T>;
+}
+
+// SDK 스트림 중 이 파일이 쓰는 부분만 적은 모양 — 테스트에서 가짜 클라이언트를 넣을 수 있게 한다.
+export type ConversationClient = {
+  beta: {
+    messages: {
+      stream(
+        body: unknown,
+        options?: { signal?: AbortSignal },
+      ): AsyncIterable<unknown> & { finalMessage(): Promise<{ stop_reason: string | null }> };
+    };
+  };
+};
+
+type StreamEvent = { type?: string; delta?: { type?: string; text?: string }; content_block?: { type?: string } };
+
+/**
+ * 대화 응답을 스트리밍으로 받아 화면에 보낼 이벤트로 바꾼다. 예외는 던지지 않고 마지막에 error 이벤트로 알린다.
+ * 응답 도중 서버 측 폴백이 일어나면 `fallback` 블록이 끼어들고 앞의 글은 이미 나간 뒤라서, reset으로 화면이 버리게 한다.
+ * 편집자가 중단(signal abort)해서 난 예외는 오류가 아니므로 조용히 끝낸다.
+ */
+export async function* streamConversation(
+  input: {
+    system: string;
+    context: string;
+    messages: ChatMessage[];
+    effort: "low" | "medium" | "high";
+    signal?: AbortSignal;
+  },
+  client?: ConversationClient,
+): AsyncGenerator<ChatEvent> {
+  try {
+    const conversation = client ?? (getClient() as unknown as ConversationClient);
+    const stream = conversation.beta.messages.stream(
+      {
+        model: CLAUDE_REVIEW_MODEL,
+        max_tokens: 8000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        system: input.system,
+        output_config: { effort: input.effort },
+        messages: buildChatMessages(input.context, input.messages),
+      },
+      input.signal ? { signal: input.signal } : undefined,
+    );
+
+    for await (const raw of stream) {
+      const event = raw as StreamEvent;
+      if (event.type === "content_block_delta" && event.delta?.type === "text_delta") {
+        yield { t: "delta", text: event.delta.text ?? "" };
+      } else if (event.type === "content_block_start" && event.content_block?.type === "fallback") {
+        yield { t: "reset" };
+      }
+    }
+
+    const { stop_reason } = await stream.finalMessage();
+    if (stop_reason === "refusal") {
+      yield { t: "error", message: "Claude가 이 요청을 처리하지 못했습니다 (정책상 거절)" };
+    } else if (stop_reason === "max_tokens") {
+      yield { t: "error", message: "응답이 길어 중간에 잘렸습니다. 요청 범위를 줄여 다시 시도해 주세요" };
+    } else {
+      yield { t: "done" };
+    }
+  } catch (err) {
+    if (input.signal?.aborted) return;
+    yield { t: "error", message: toCallError(err).message };
+  }
 }
