@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { discardPublishedDraftAction, savePublishedDraftAction } from "@/lib/actions/publishedDraftActions";
 import {
   approveMasterReviewAction,
   editPublishedStoryAction,
@@ -9,6 +10,7 @@ import {
   saveMasterReviewAction,
 } from "@/lib/actions/masterReviewActions";
 import {
+  applyPublishedEdits,
   buildPublishedEdits,
   buildSaveEdits,
   chaptersDiffer,
@@ -24,6 +26,7 @@ import {
   type EditorDetail,
   type MasterChapter,
   type PreReviewItem,
+  type PublishedDraft,
 } from "@/lib/masterReview";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -34,7 +37,7 @@ import { ParagraphWorkspace } from "@/components/admin/ParagraphWorkspace";
 import { DownloadButton } from "@/components/admin/DownloadButton";
 import { SaveStatusChip } from "@/components/admin/SaveStatusChip";
 import { useAutosave } from "@/components/admin/useAutosave";
-import type { AutosaveResult } from "@/lib/autosaver";
+import { formatClock, type AutosaveResult } from "@/lib/autosaver";
 import { downloadTextFile, printHtml } from "@/components/admin/manuscriptDownload";
 import { buildManuscriptText, buildPrintHtml, manuscriptFileName } from "@/lib/manuscriptExport";
 import { StructureSuggestions } from "@/components/admin/StructureSuggestions";
@@ -49,8 +52,18 @@ function sameNumbers(a: number[], b: number[]): boolean {
 export function MasterEditor({ detail }: { detail: EditorDetail }) {
   const isReview = detail.mode === "review";
 
-  const [chapters, setChapters] = useState<MasterChapter[]>(detail.chapters);
-  const [baseline, setBaseline] = useState<MasterChapter[]>(detail.chapters);
+  // 게시본: 이어 쓰던 초안이 있고 그 사이 게시본이 바뀌지 않았으면 그 글로 시작한다(바뀌었으면 아래 staleDraft로 묻는다).
+  const [start] = useState(() => {
+    const draft = detail.mode === "published" && detail.draft && !detail.draft.stale ? detail.draft : null;
+    return { chapters: draft ? applyPublishedEdits(detail.chapters, draft.edits) : detail.chapters, draftAt: draft ? draft.updatedAt : null };
+  });
+  const [chapters, setChapters] = useState<MasterChapter[]>(start.chapters);
+  // baseline: 마지막으로 (초안·임시) 저장한 글. 게시본에서는 liveBaseline이 게시된 글이다.
+  const [baseline, setBaseline] = useState<MasterChapter[]>(start.chapters);
+  const [liveBaseline, setLiveBaseline] = useState<MasterChapter[]>(detail.chapters);
+  const [liveVersion, setLiveVersion] = useState(detail.contentVersion ?? 0);
+  const [draftInfo, setDraftInfo] = useState<{ updatedAt: number } | null>(start.draftAt !== null ? { updatedAt: start.draftAt } : null);
+  const [staleDraft, setStaleDraft] = useState<PublishedDraft | null>(!isReview && detail.draft?.stale ? detail.draft : null);
   const [confirmed, setConfirmed] = useState<number[]>(detail.confirmedChapters);
   const [savedConfirmed, setSavedConfirmed] = useState<number[]>(detail.confirmedChapters);
   const [view, setView] = useState<"edit" | "read">("edit");
@@ -94,6 +107,8 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   const dirty = isReview
     ? buildSaveEdits(chapters, baseline).length > 0 || !sameNumbers(confirmed, savedConfirmed)
     : buildPublishedEdits(chapters, baseline).length > 0;
+  // 게시본에 반영할 수 있는 글(게시된 글과 다름). dirty는 "초안으로도 아직 저장 안 됨"이다.
+  const canApply = !isReview && buildPublishedEdits(chapters, liveBaseline).length > 0;
 
   useEffect(() => {
     if (!dirty || approved) return;
@@ -110,8 +125,18 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   // 화면 글(chapters)은 건드리지 않고, 서버에 보낸 정규화본으로 baseline만 올린다(타이핑 중 커서·내용을 지키고,
   // 저장하는 동안 이어 쓴 글은 계속 "저장 안 됨"으로 남는다).
   async function autosaveSave(): Promise<AutosaveResult> {
-    if (!isReview) return { ok: true };
     const normalized = chapters.map((c) => ({ ...c, paragraphs: normalizeParagraphs(c.paragraphs) }));
+    if (!isReview) {
+      if (buildPublishedEdits(normalized, baseline).length === 0) return { ok: true };
+      // 게시본이 바뀐 뒤의 옛 초안이 남아 있으면 새 초안이 그것을 덮어쓰지 않게, 먼저 불러오거나 버리게 한다.
+      if (staleDraft) return { skipped: "이전 초안을 먼저 불러오거나 버려 주세요" };
+      const draftEdits = buildPublishedEdits(normalized, liveBaseline);
+      const saved = await savePublishedDraftAction({ docId: detail.id, edits: draftEdits, baseContentVersion: liveVersion });
+      if (saved.error) return { error: saved.error };
+      setBaseline(normalized);
+      setDraftInfo(draftEdits.length ? { updatedAt: Date.now() } : null);
+      return { ok: true };
+    }
     const edits = buildSaveEdits(normalized, baseline);
     if (edits.length === 0 && sameNumbers(confirmed, savedConfirmed)) return { ok: true };
     // 마스터 저장은 제목·본문이 빈 챕터를 거절한다. 글을 쓰다 잠깐 비는 순간은 오류가 아니라 건너뛴다.
@@ -217,15 +242,18 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
         return false;
       }
     } else {
-      const edits = buildPublishedEdits(normalized, baseline);
-      if (edits.length) {
-        const result = await editPublishedStoryAction({ docId: detail.id, edits });
-        if (result.error) {
-          setError(result.error);
-          return false;
-        }
-        setNotices(result.warnings ?? []);
+      // 게시본의 임시 저장은 초안 저장이다. 게시된 글은 handleApply(게시본에 반영)만 바꾼다.
+      if (staleDraft) {
+        setError("이전 초안을 먼저 불러오거나 버려 주세요");
+        return false;
       }
+      const draftEdits = buildPublishedEdits(normalized, liveBaseline);
+      const result = await savePublishedDraftAction({ docId: detail.id, edits: draftEdits, baseContentVersion: liveVersion });
+      if (result.error) {
+        setError(result.error);
+        return false;
+      }
+      setDraftInfo(draftEdits.length ? { updatedAt: Date.now() } : null);
     }
     setChapters(normalized);
     setBaseline(normalized);
@@ -239,6 +267,63 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
     await flushAutosave();
     await save();
     setBusy(null);
+  }
+
+  // 게시본에 반영: 지금 화면의 글을 게시된 글과 비교해 게시본을 바꾼다(규칙 검사·수정 기록은 서버가 한다).
+  async function handleApply() {
+    setBusy("save");
+    await flushAutosave();
+    setError(null);
+    const normalized = chapters.map((c) => ({ ...c, paragraphs: normalizeParagraphs(c.paragraphs) }));
+    const edits = buildPublishedEdits(normalized, liveBaseline);
+    if (edits.length) {
+      const result = await editPublishedStoryAction({ docId: detail.id, edits });
+      if (result.error) {
+        setError(result.error);
+        setBusy(null);
+        return;
+      }
+      setNotices(result.warnings ?? []);
+      setLiveVersion(result.contentVersion ?? liveVersion + 1);
+    }
+    setChapters(normalized);
+    setBaseline(normalized);
+    setLiveBaseline(normalized);
+    setDraftInfo(null);
+    setStaleDraft(null);
+    setSavedAt(true);
+    setBusy(null);
+  }
+
+  async function handleDiscardDraft() {
+    if (!window.confirm("초안을 버리고 게시된 내용으로 되돌릴까요?")) return;
+    await flushAutosave();
+    const result = await discardPublishedDraftAction(detail.id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setError(null);
+    setChapters(liveBaseline);
+    setBaseline(liveBaseline);
+    setDraftInfo(null);
+  }
+
+  // 게시본이 바뀐 뒤의 옛 초안: 불러오면 그 장의 문단이 초안 내용으로 바뀐다. baseline은 그대로라 곧 새 버전 기준으로 자동 저장된다.
+  function handleLoadStaleDraft() {
+    if (!staleDraft) return;
+    setSavedAt(false);
+    setChapters((prev) => applyPublishedEdits(prev, staleDraft.edits));
+    setStaleDraft(null);
+  }
+
+  async function handleDiscardStaleDraft() {
+    const result = await discardPublishedDraftAction(detail.id);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    setStaleDraft(null);
   }
 
   async function handleApprove() {
@@ -324,6 +409,32 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
         </ul>
       )}
 
+      {!isReview && draftInfo && (
+        <div role="status" className="flex flex-wrap items-center gap-3 rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <span className="min-w-48 flex-1 leading-relaxed">
+            <strong className="font-semibold">초안으로 저장됨{draftInfo.updatedAt ? ` · ${formatClock(draftInfo.updatedAt)}` : ""}</strong>
+            <span className="ml-2">아직 게시본에는 반영되지 않았어요</span>
+          </span>
+          <Button type="button" size="lg" variant="outline" disabled={locked} onClick={handleDiscardDraft}>
+            초안 버리기
+          </Button>
+        </div>
+      )}
+      {!isReview && staleDraft && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span className="min-w-48 flex-1 leading-relaxed">
+            <strong className="font-semibold">초안을 만든 뒤 게시본이 바뀌었어요.</strong>
+            <span className="ml-2">불러오면 초안에 든 장의 문단이 초안 내용으로 바뀝니다.</span>
+          </span>
+          <Button type="button" size="lg" variant="outline" disabled={locked} onClick={handleLoadStaleDraft}>
+            불러오기
+          </Button>
+          <Button type="button" size="lg" variant="outline" disabled={locked} onClick={handleDiscardStaleDraft}>
+            초안 버리기
+          </Button>
+        </div>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-[15rem_minmax(0,1fr)_21rem] lg:items-start">
         <nav aria-label="챕터 목록" className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-card p-3">
           <h2 className="px-2 pt-1 pb-2 text-sm font-semibold">
@@ -404,7 +515,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
             <SaveStatusChip status={autosave.status} onRetry={() => void flushAutosave()} />
             <DownloadButton onSelect={handleDownload} />
             <Button type="button" size="lg" variant="outline" disabled={locked || !dirty} onClick={handleSave}>
-              {busy === "save" ? "저장 중…" : savedAt && !dirty ? (isReview ? "임시 저장됨" : "저장됨") : isReview ? "임시 저장" : "저장"}
+              {busy === "save" ? "저장 중…" : savedAt && !dirty ? "임시 저장됨" : "임시 저장"}
             </Button>
           </div>
 
@@ -556,7 +667,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
           <p className="text-sm leading-relaxed text-muted-foreground">
             {isReview
               ? "모든 챕터를 확인 완료로 표시하면 승인할 수 있어요. 승인하면 편집본이 마스터로 확정되고 일러스트 → 현지화 → 품질 게이트가 이어서 실행됩니다."
-              : "저장하면 게시된 본문이 바로 바뀌고, 수정 전 내용은 기록으로 남아요."}
+              : "게시본에 반영을 누르기 전까지는 초안으로만 남고 게시된 글은 바뀌지 않아요. 반영하면 바로 공개되고 수정 전 내용은 기록으로 남아요."}
           </p>
         </div>
         {isReview ? (
@@ -564,8 +675,8 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
             {approved ? "승인됨" : busy === "approve" ? "승인 중…" : allConfirmed ? "편집 완료, 다음 단계 진행" : "모든 챕터 확인 후 승인할 수 있어요"}
           </Button>
         ) : (
-          <Button type="button" size="lg" className="h-10 px-5 text-sm" disabled={!dirty || locked} onClick={handleSave}>
-            {busy === "save" ? "저장 중…" : "게시본에 저장"}
+          <Button type="button" size="lg" className="h-10 px-5 text-sm" disabled={!canApply || locked} onClick={handleApply}>
+            {busy === "save" ? "반영 중…" : "게시본에 반영"}
           </Button>
         )}
       </div>
