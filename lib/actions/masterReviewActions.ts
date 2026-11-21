@@ -15,12 +15,13 @@ import { getMasterReview, getPublishedStoryForEdit } from "@/lib/data/masterRevi
 import {
   suggestIdeas,
   polishParagraph,
+  suggestStructure,
   reviewStory,
   generatePreReview,
   type EditorContextInput,
   type StoryReviewResult,
 } from "@/lib/claude/editor";
-import type { Idea, IdeaDirection, PolishChange, RejectedChange, StoryReviewKind } from "@/lib/claude/editing";
+import type { Idea, IdeaDirection, PolishChange, RejectedChange, StoryReviewKind, StructureChange } from "@/lib/claude/editing";
 import { isValidChaptersInput, type EditorDetail, type MasterChapter, type PreReviewItem } from "@/lib/masterReview";
 
 /**
@@ -180,6 +181,23 @@ export async function polishParagraphAction(
     return { changes };
   } catch (err) {
     return { error: messageOf(err, "다듬기 실패") };
+  }
+}
+
+// ④ 문단 구성 제안. 문단 경계를 바꾸는 제안이라 게시된 소설(표현 수정만 허용)에서는 받지 않는다.
+export async function suggestStructureAction(
+  input: ClaudeTarget & { chapterNumber: number; instruction?: string },
+): Promise<{ error?: string; changes?: StructureChange[] }> {
+  if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  if (input.mode !== "review") return { error: "게시된 소설은 문단 구조를 바꿀 수 없습니다" };
+  if (tooLong(input.instruction)) return { error: "지시가 너무 깁니다" };
+  try {
+    const context = await loadContext(input);
+    if ("error" in context) return context;
+    const changes = await suggestStructure({ ...context, chapterNumber: input.chapterNumber, instruction: input.instruction });
+    return { changes };
+  } catch (err) {
+    return { error: messageOf(err, "문단 구성 제안 실패") };
   }
 }
 

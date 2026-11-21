@@ -13,6 +13,7 @@ import {
   approveMasterReviewAction,
   editPublishedStoryAction,
   suggestIdeasAction,
+  suggestStructureAction,
   polishParagraphAction,
   reviewStoryAction,
   ensurePreReviewAction,
@@ -52,6 +53,7 @@ describe("관리자 세션 재확인", () => {
     expect(await editPublishedStoryAction({ docId: "d1", edits: [] })).toEqual(expected);
     expect(await suggestIdeasAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0 })).toEqual(expected);
     expect(await polishParagraphAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0 })).toEqual(expected);
+    expect(await suggestStructureAction({ mode: "review", id: "s1", chapters, chapterNumber: 1 })).toEqual(expected);
     expect(await reviewStoryAction({ mode: "review", id: "s1", chapters, kind: "flow" })).toEqual(expected);
     expect(await ensurePreReviewAction("s1")).toEqual(expected);
 
@@ -132,6 +134,31 @@ describe("Claude 액션", () => {
     const result = await suggestIdeasAction({ mode: "published", id: "d1", chapters, chapterNumber: 1, paragraphIndex: 0 });
     expect(result).toHaveProperty("error");
     expect(editor.suggestIdeas).not.toHaveBeenCalled();
+  });
+
+  it("문단 구성 제안: 서버에서 설정집을 읽어 현재 본문과 함께 Claude에 넘기고 제안 목록을 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(detail());
+    const changes = [{ kind: "merge" as const, paragraphIndex: 0, splitBefore: "", reason: "한 호흡이에요" }];
+    vi.mocked(editor.suggestStructure).mockResolvedValueOnce(changes);
+
+    const result = await suggestStructureAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, instruction: "대사 단위로" });
+
+    expect(result).toEqual({ changes });
+    expect(editor.suggestStructure).toHaveBeenCalledWith(
+      expect.objectContaining({ chapters, characters: detail().characters, level: "Lv3", chapterNumber: 1, instruction: "대사 단위로" }),
+    );
+  });
+
+  it("문단 구성 제안은 마스터 검토에서만 가능하다 — 게시된 소설은 Claude를 부르지 않고 거절한다", async () => {
+    const result = await suggestStructureAction({ mode: "published", id: "d1", chapters, chapterNumber: 1 });
+    expect(result).toEqual({ error: "게시된 소설은 문단 구조를 바꿀 수 없습니다" });
+    expect(editor.suggestStructure).not.toHaveBeenCalled();
+  });
+
+  it("문단 구성 제안의 지시가 너무 길면 Claude를 부르지 않고 거절한다", async () => {
+    const result = await suggestStructureAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, instruction: "가".repeat(501) });
+    expect(result).toEqual({ error: "지시가 너무 깁니다" });
+    expect(editor.suggestStructure).not.toHaveBeenCalled();
   });
 
   it("다듬기: 고른 방향과 거절한 제안을 함께 넘기고 고칠 곳 목록을 돌려준다", async () => {

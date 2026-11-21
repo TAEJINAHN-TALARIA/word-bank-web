@@ -3,8 +3,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("./structured");
 
-import { suggestIdeas, polishParagraph, reviewStory, generatePreReview } from "./editor";
-import { SYSTEM_PROMPT, IDEAS_SYSTEM_PROMPT, POLISH_SYSTEM_PROMPT } from "./editing";
+import { suggestIdeas, polishParagraph, reviewStory, generatePreReview, suggestStructure } from "./editor";
+import { SYSTEM_PROMPT, IDEAS_SYSTEM_PROMPT, POLISH_SYSTEM_PROMPT, STRUCTURE_SYSTEM_PROMPT } from "./editing";
 import * as structured from "./structured";
 import type { MasterChapter } from "@/lib/masterReview";
 
@@ -83,6 +83,39 @@ describe("polishParagraph", () => {
 
   it("없는 문단이면 Claude를 부르지 않고 오류를 던진다", async () => {
     await expect(polishParagraph({ ...base, chapterNumber: 2, paragraphIndex: 5 })).rejects.toThrow();
+    expect(mockCall).not.toHaveBeenCalled();
+  });
+});
+
+describe("suggestStructure", () => {
+  it("문단 구성 전용 시스템 프롬프트로 호출하고, 본문은 context로 대상 챕터와 지시는 task로 넘긴다", async () => {
+    mockCall.mockResolvedValueOnce({
+      changes: [{ kind: "split", paragraphNumber: 2, splitBefore: "비가 올 것 같았다.", reason: "호흡이 길다" }],
+    });
+
+    const changes = await suggestStructure({ ...base, chapterNumber: 1, instruction: "대사 단위로" });
+
+    expect(changes).toEqual([{ kind: "split", paragraphIndex: 1, splitBefore: "비가 올 것 같았다.", reason: "호흡이 길다" }]);
+    const call = mockCall.mock.calls[0][0];
+    expect(call.system).toBe(STRUCTURE_SYSTEM_PROMPT);
+    expect(call.effort).toBe("medium");
+    expect(call.context).toContain("[2] 하늘이 흐렸다.");
+    expect(call.task).toContain("1장");
+    expect(call.task).toContain("대사 단위로");
+  });
+
+  it("검증에서 걸러진 항목(없는 문단, 문단에 없는 나눌 문장)은 돌려주지 않는다", async () => {
+    mockCall.mockResolvedValueOnce({
+      changes: [
+        { kind: "split", paragraphNumber: 9, splitBefore: "x", reason: "없는 문단" },
+        { kind: "split", paragraphNumber: 2, splitBefore: "글에 없는 문장.", reason: "엉뚱함" },
+      ],
+    });
+    expect(await suggestStructure({ ...base, chapterNumber: 1 })).toEqual([]);
+  });
+
+  it("없는 챕터면 Claude를 부르지 않고 오류를 던진다", async () => {
+    await expect(suggestStructure({ ...base, chapterNumber: 9 })).rejects.toThrow();
     expect(mockCall).not.toHaveBeenCalled();
   });
 });

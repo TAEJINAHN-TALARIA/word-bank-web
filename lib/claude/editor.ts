@@ -3,23 +3,27 @@ import type { CharacterInfo, LevelGuidance, MasterChapter, PreReviewItem } from 
 import {
   IDEAS_SYSTEM_PROMPT,
   POLISH_SYSTEM_PROMPT,
+  STRUCTURE_SYSTEM_PROMPT,
   SYSTEM_PROMPT,
   buildIdeasTask,
   buildPolishTask,
   buildPreReviewTask,
   buildStoryContext,
   buildStoryReviewTask,
+  buildStructureTask,
   locateItems,
   storyReviewTitle,
   validateChanges,
   validateIdeas,
+  validateStructureChanges,
   type Idea,
   type IdeaDirection,
   type PolishChange,
   type RejectedChange,
   type StoryReviewKind,
+  type StructureChange,
 } from "./editing";
-import { ideasSchema, polishSchema, preReviewSchema, storyReviewSchema } from "./schemas";
+import { ideasSchema, polishSchema, preReviewSchema, storyReviewSchema, structureSchema } from "./schemas";
 import { callStructured } from "./structured";
 
 // 편집 화면이 서버 액션에 넘기는 소설 상태 — 본문은 화면에서 편집 중인 현재 본이다.
@@ -79,6 +83,22 @@ export async function polishParagraph(
     }),
   });
   return validateChanges(raw.changes, draft);
+}
+
+// ④ 문단 구성 — 챕터 전체를 읽고 문단을 나누거나 합칠 곳 목록만 돌려준다. 본문은 바꾸지 않는다.
+export async function suggestStructure(
+  input: EditorContextInput & { chapterNumber: number; instruction?: string },
+): Promise<StructureChange[]> {
+  const chapter = input.chapters.find((c) => c.chapterNumber === input.chapterNumber);
+  if (!chapter) throw new Error(`${input.chapterNumber}장을 찾을 수 없습니다`);
+  const raw = await callStructured({
+    schema: structureSchema,
+    effort: "medium",
+    system: STRUCTURE_SYSTEM_PROMPT,
+    context: buildStoryContext(input),
+    task: buildStructureTask({ chapterNumber: input.chapterNumber, instruction: input.instruction }),
+  });
+  return validateStructureChanges(raw.changes, chapter.paragraphs);
 }
 
 export type StoryReviewResult = {

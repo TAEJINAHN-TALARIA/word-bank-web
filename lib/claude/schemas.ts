@@ -11,6 +11,12 @@ export const polishSchema = z.object({
   changes: z.array(z.object({ before: z.string(), after: z.string(), reason: z.string() })),
 });
 
+export const structureSchema = z.object({
+  changes: z.array(
+    z.object({ kind: z.enum(["split", "merge"]), paragraphNumber: z.number().int(), splitBefore: z.string(), reason: z.string() }),
+  ),
+});
+
 export const storyReviewSchema = z.object({
   title: z.string(),
   items: z.array(
