@@ -11,18 +11,18 @@ import {
   type MasterEdit,
   type PublishedEdit,
 } from "@/lib/admin-functions/storyGenerator";
-import { getMasterReview, getPublishedStoryForEdit } from "@/lib/data/masterReviews";
+import { getMasterReview } from "@/lib/data/masterReviews";
+import { loadEditorContext, type ClaudeTarget } from "@/lib/claude/editorContext";
 import {
   suggestIdeas,
   polishParagraph,
   suggestStructure,
   reviewStory,
   generatePreReview,
-  type EditorContextInput,
   type StoryReviewResult,
 } from "@/lib/claude/editor";
 import type { Idea, IdeaDirection, PolishChange, RejectedChange, StoryReviewKind, StructureChange } from "@/lib/claude/editing";
-import { isValidChaptersInput, type EditorDetail, type MasterChapter, type PreReviewItem } from "@/lib/masterReview";
+import type { PreReviewItem } from "@/lib/masterReview";
 
 /**
  * Next.js는 프로덕션에서 Server Action이 throw한 에러 메시지를 마스킹한다.
@@ -92,31 +92,8 @@ export async function editPublishedStoryAction(input: {
 }
 
 // ── Claude 패널 ──
-// 설정집(인물 말투, 서술 문체, 레벨 기준)은 클라이언트가 보낸 값을 믿지 않고 서버에서 다시 읽는다.
+// 설정집(인물 말투, 서술 문체, 레벨 기준)은 클라이언트가 보낸 값을 믿지 않고 서버에서 다시 읽는다(loadEditorContext).
 // 클라이언트가 보내는 건 편집 중인 현재 본문뿐이다.
-
-type ClaudeTarget = { mode: "review" | "published"; id: string; chapters: MasterChapter[] };
-
-async function loadContext(target: ClaudeTarget): Promise<EditorContextInput | { error: string }> {
-  if (!isValidChaptersInput(target.chapters)) return { error: "본문 형식이 올바르지 않습니다" };
-
-  let detail: EditorDetail | null;
-  if (target.mode === "review") {
-    detail = await getMasterReview(target.id);
-  } else {
-    detail = (await getPublishedStoryForEdit(target.id))?.detail ?? null;
-  }
-  if (!detail) return { error: "소설을 찾을 수 없습니다" };
-
-  return {
-    title: detail.title,
-    level: detail.level,
-    chapters: target.chapters,
-    characters: detail.characters,
-    narrativeStyle: detail.narrativeStyle,
-    levelGuidance: detail.levelGuidance,
-  };
-}
 
 // 작업 스레드(고른 방향, 거절한 제안, 지시)는 화면이 들고 있다가 요청마다 함께 보낸다. 서버는 크기만 제한한다.
 const MAX_TEXT = 500;
@@ -134,7 +111,7 @@ export async function suggestIdeasAction(
   if (input.mode !== "review") return { error: "게시된 소설은 표현 수정만 할 수 있어 방향 제안을 받을 수 없습니다" };
   if (tooLong(input.instruction)) return { error: "지시가 너무 깁니다" };
   try {
-    const context = await loadContext(input);
+    const context = await loadEditorContext(input);
     if ("error" in context) return context;
     const ideas = await suggestIdeas({
       ...context,
@@ -168,7 +145,7 @@ export async function polishParagraphAction(
     return { error: "요청 내용이 너무 깁니다" };
   }
   try {
-    const context = await loadContext(input);
+    const context = await loadEditorContext(input);
     if ("error" in context) return context;
     const changes = await polishParagraph({
       ...context,
@@ -192,7 +169,7 @@ export async function suggestStructureAction(
   if (input.mode !== "review") return { error: "게시된 소설은 문단 구조를 바꿀 수 없습니다" };
   if (tooLong(input.instruction)) return { error: "지시가 너무 깁니다" };
   try {
-    const context = await loadContext(input);
+    const context = await loadEditorContext(input);
     if ("error" in context) return context;
     const changes = await suggestStructure({ ...context, chapterNumber: input.chapterNumber, instruction: input.instruction });
     return { changes };
@@ -206,7 +183,7 @@ export async function reviewStoryAction(
 ): Promise<{ error?: string; result?: StoryReviewResult }> {
   if (!(await getAdminSession())) return LOGIN_REQUIRED;
   try {
-    const context = await loadContext(input);
+    const context = await loadEditorContext(input);
     if ("error" in context) return context;
     return { result: await reviewStory({ ...context, kind: input.kind, instruction: input.instruction }) };
   } catch (err) {
