@@ -449,8 +449,9 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                 paragraphIndex={paragraphIndex}
                 paragraphCount={currentChapter.paragraphs.length}
                 text={currentText}
-                originalText={originalText}
-                showOriginal={showOriginal}
+                compareText={originalText}
+                compareLabel="원본"
+                showCompare={showOriginal}
                 disabled={locked}
                 onTextChange={(text) => updateParagraph(currentChapter.chapterNumber, paragraphIndex, text)}
                 onInsert={(where) => insertAt(currentChapter.chapterNumber, paragraphIndex + (where === "below" ? 1 : 0))}

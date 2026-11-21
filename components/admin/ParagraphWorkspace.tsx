@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { polishParagraphAction, suggestIdeasAction } from "@/lib/actions/masterReviewActions";
 import { applyChanges, type Idea, type PolishChange, type RejectedChange } from "@/lib/claude/editing";
 import type { MasterChapter } from "@/lib/masterReview";
+import { diffWords } from "@/lib/textDiff";
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/admin/InlineError";
+import { HighlightedTextarea } from "@/components/admin/HighlightedTextarea";
 import { cn } from "@/lib/utils";
 
 type Decision = "accept" | "reject";
@@ -26,8 +28,9 @@ export function ParagraphWorkspace({
   paragraphIndex,
   paragraphCount,
   text,
-  originalText,
-  showOriginal,
+  compareText,
+  compareLabel,
+  showCompare,
   disabled,
   onTextChange,
   onInsert,
@@ -41,8 +44,10 @@ export function ParagraphWorkspace({
   paragraphIndex: number;
   paragraphCount: number;
   text: string;
-  originalText: string | undefined;
-  showOriginal: boolean;
+  // 나란히 볼 이전 버전의 같은 문단. 문단 구조가 바뀌어 짝이 맞지 않으면 undefined.
+  compareText: string | undefined;
+  compareLabel: string;
+  showCompare: boolean;
   disabled: boolean;
   onTextChange: (text: string) => void;
   onInsert: (where: "above" | "below") => void;
@@ -67,7 +72,7 @@ export function ParagraphWorkspace({
   const [versions, setVersions] = useState<Version[]>([{ label: "원문", text }]);
 
   const busy = disabled || ideasLoading || polishLoading;
-  const edited = originalText !== undefined && originalText !== text;
+  const segments = useMemo(() => (compareText === undefined ? null : diffWords(compareText, text)), [compareText, text]);
 
   async function askIdeas() {
     setIdeasLoading(true);
@@ -214,19 +219,50 @@ export function ParagraphWorkspace({
             <h3 id="ws-write" className="min-w-28 flex-1 text-sm font-semibold">내가 쓰기</h3>
             <span className="text-xs text-muted-foreground">{text.replace(/\s/g, "").length}자</span>
           </div>
-          <textarea
-            aria-label={`문단 ${paragraphIndex + 1} 본문`}
-            value={text}
-            rows={6}
-            disabled={disabled}
-            onChange={(e) => handleType(e.target.value)}
-            className="w-full resize-y rounded-xl border-2 border-primary bg-background px-3.5 py-3 font-serif text-base leading-loose outline-none disabled:opacity-60"
-          />
-          {showOriginal && edited && (
-            <p className="border-t border-dashed border-border pt-2 text-sm leading-relaxed text-muted-foreground">
-              <strong className="font-semibold">원본</strong> · <span className="line-through">{originalText}</span>
-            </p>
-          )}
+          {/* xl 이상에서는 이전 버전(왼쪽)과 내 글(오른쪽)을 나란히, 그보다 좁으면 위아래로 쌓는다 */}
+          <div className={cn("grid gap-3", showCompare && "xl:grid-cols-2")}>
+            {showCompare && (
+              <div className="flex flex-col gap-1.5">
+                <p className="text-xs font-semibold text-muted-foreground">
+                  이전 버전 · {compareLabel} <span className="font-normal">· 읽기 전용</span>
+                </p>
+                <div className="min-h-[11.5rem] rounded-xl border-2 border-border bg-muted/40 px-3.5 py-3 font-serif text-base leading-loose whitespace-pre-wrap break-words">
+                  {compareText === undefined ? (
+                    <span className="font-sans text-sm leading-relaxed text-muted-foreground">
+                      문단을 추가·삭제·이동해서 이전 버전과 짝을 맞출 수 없어요
+                    </span>
+                  ) : compareText === text ? (
+                    <>
+                      {compareText}
+                      <span className="mt-2 block font-sans text-sm text-muted-foreground">아직 바꾼 곳이 없어요</span>
+                    </>
+                  ) : (
+                    segments
+                      ?.filter((segment) => segment.type !== "ins")
+                      .map((segment, i) =>
+                        segment.type === "del" ? (
+                          <del key={i} className="rounded-sm bg-red-500/15 text-red-700 decoration-red-700/60 dark:text-red-300">
+                            {segment.text}
+                          </del>
+                        ) : (
+                          <span key={i}>{segment.text}</span>
+                        ),
+                      )
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col gap-1.5">
+              {showCompare && <p className="text-xs font-semibold text-muted-foreground">내가 고쳐쓰는 중</p>}
+              <HighlightedTextarea
+                aria-label={`문단 ${paragraphIndex + 1} 본문`}
+                value={text}
+                disabled={disabled}
+                onChange={handleType}
+                highlight={showCompare && compareText !== text ? segments : null}
+              />
+            </div>
+          </div>
           <input
             aria-label="다듬을 때 신경 쓸 점 (선택)"
             placeholder="신경 쓸 점 (선택) 예: 대사를 더 부드럽게"
