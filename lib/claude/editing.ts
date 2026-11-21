@@ -219,3 +219,86 @@ export function locateItems<T extends { chapterNumber: number; paragraphNumber: 
   }
   return located;
 }
+
+// ── 문단 구성 제안 (나누기·합치기) ──
+// 마스터 검토에서만 쓴다. Claude는 문단 경계만 제안하고, 적용은 편집자가 수락한 항목만 한다.
+
+const MAX_STRUCTURE_CHANGES = 8;
+
+export const STRUCTURE_SYSTEM_PROMPT = `${INTRO} 지금은 문단 경계만 다듬는 편집자입니다.
+
+문단 구성 원칙:
+- 줄거리, 사실 관계, 인물, 시점, 결말과 문장 자체를 바꾸지 마세요. 제안은 문단 경계(나누기·합치기)뿐입니다.
+- 나누기(split): 문단 하나를 둘로 나눕니다. 나눌 위치는 그 문단에 글자 하나 다르지 않게 그대로 있는 문장(splitBefore)으로 지정하고, 그 문장 앞에서 나눕니다. 문단 맨 앞 문장은 지정하지 마세요.
+- 합치기(merge): 지정한 문단과 바로 다음 문단을 하나로 합칩니다. splitBefore는 빈 문자열로 두세요.
+- 장면·시간·장소·화자가 바뀌거나 한 문단의 호흡이 지나치게 긴 곳에서 나누고, 한 호흡으로 읽어야 할 짧은 문단(대사 한 줄 등)은 합치세요. 독자 수준(레벨)의 문장 길이와 읽는 호흡을 근거로 삼으세요.
+- 한 문단은 한 제안에만 쓰세요(합치기는 두 문단을 씁니다). 확실한 곳만 최대 ${MAX_STRUCTURE_CHANGES}건을 제안하고, 고칠 곳이 없으면 changes를 빈 배열로 돌려주세요.
+${DATA_NOTICE}
+${JSON_ONLY}`;
+
+export function buildStructureTask(input: { chapterNumber: number; instruction?: string }): string {
+  const instruction = input.instruction?.trim();
+  return `[요청]
+대상: ${input.chapterNumber}장 전체 문단
+${instruction ? `지시: ${instruction}\n` : ""}
+이 장에서 문단을 나누거나 합칠 곳을 changes로 돌려주세요. kind는 split 또는 merge, paragraphNumber는 [소설 본문]에서 이 장의 문단 앞에 붙은 번호, splitBefore는 split일 때 나눌 문장(merge는 빈 문자열), reason은 한 문장으로 쓰세요.`;
+}
+
+export type RawStructureChange = { kind: "split" | "merge"; paragraphNumber: number; splitBefore: string; reason: string };
+export type StructureChange = { kind: "split" | "merge"; paragraphIndex: number; splitBefore: string; reason: string };
+
+/**
+ * 구조 제안 검증. 문단 번호를 0부터의 인덱스로 바꾸고, 어긋난 항목은 버린다 — 없는 문단, 나눌 문장이 문단에
+ * 정확히 한 번 있지 않거나 문단 맨 앞인 나누기, 마지막 문단의 합치기, 앞선 항목과 같은 문단을 쓰는 항목
+ * (합치기는 두 문단을 쓴다). 최대 8건.
+ */
+export function validateStructureChanges(raw: RawStructureChange[], paragraphs: string[]): StructureChange[] {
+  const kept: StructureChange[] = [];
+  const used = new Set<number>();
+  for (const c of raw) {
+    const index = c.paragraphNumber - 1;
+    const paragraph = paragraphs[index];
+    if (paragraph === undefined) continue;
+
+    if (c.kind === "merge") {
+      if (index + 1 >= paragraphs.length) continue;
+    } else if (c.kind === "split") {
+      const at = c.splitBefore ? paragraph.indexOf(c.splitBefore) : -1;
+      if (at <= 0 || paragraph.indexOf(c.splitBefore, at + 1) >= 0 || !paragraph.slice(0, at).trim()) continue;
+    } else {
+      continue;
+    }
+
+    const spans = c.kind === "merge" ? [index, index + 1] : [index];
+    if (spans.some((i) => used.has(i))) continue;
+    spans.forEach((i) => used.add(i));
+    kept.push({
+      kind: c.kind,
+      paragraphIndex: index,
+      splitBefore: c.kind === "split" ? c.splitBefore : "",
+      reason: c.reason.trim(),
+    });
+    if (kept.length === MAX_STRUCTURE_CHANGES) break;
+  }
+  return kept;
+}
+
+// 수락한 항목만 적용한다. 문단 번호가 큰 쪽부터 바꿔, 앞쪽을 나누거나 합쳐도 뒤 항목의 번호가 밀리지 않는다.
+// 글자는 더하거나 빼지 않는다 — 경계의 공백만 정리하고, 합치기는 공백 하나로 잇는다.
+export function applyStructureChanges(paragraphs: string[], accepted: StructureChange[]): string[] {
+  const result = [...paragraphs];
+  for (const c of [...accepted].sort((a, b) => b.paragraphIndex - a.paragraphIndex)) {
+    const paragraph = result[c.paragraphIndex];
+    if (paragraph === undefined) continue;
+    if (c.kind === "merge") {
+      const next = result[c.paragraphIndex + 1];
+      if (next === undefined) continue;
+      result.splice(c.paragraphIndex, 2, `${paragraph.trimEnd()} ${next.trimStart()}`);
+    } else {
+      const at = c.splitBefore ? paragraph.indexOf(c.splitBefore) : -1;
+      if (at <= 0) continue;
+      result.splice(c.paragraphIndex, 1, paragraph.slice(0, at).trimEnd(), paragraph.slice(at).trimStart());
+    }
+  }
+  return result;
+}
