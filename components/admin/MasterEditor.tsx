@@ -11,12 +11,15 @@ import {
 import {
   buildPublishedEdits,
   buildSaveEdits,
+  chaptersDiffer,
   countEditedParagraphs,
   editedParagraphKeys,
+  findUnsavableReason,
   insertParagraph,
   locateMemos,
   moveParagraph,
   normalizeParagraphs,
+  pairedParagraph,
   removeParagraph,
   type EditorDetail,
   type MasterChapter,
@@ -29,6 +32,9 @@ import { ClaudePanel } from "@/components/admin/ClaudePanel";
 import { FullReadView } from "@/components/admin/FullReadView";
 import { ParagraphWorkspace } from "@/components/admin/ParagraphWorkspace";
 import { DownloadButton } from "@/components/admin/DownloadButton";
+import { SaveStatusChip } from "@/components/admin/SaveStatusChip";
+import { useAutosave } from "@/components/admin/useAutosave";
+import type { AutosaveResult } from "@/lib/autosaver";
 import { downloadTextFile, printHtml } from "@/components/admin/manuscriptDownload";
 import { buildManuscriptText, buildPrintHtml, manuscriptFileName } from "@/lib/manuscriptExport";
 import { StructureSuggestions } from "@/components/admin/StructureSuggestions";
@@ -54,7 +60,10 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
       ? { chapterNumber: first.chapterNumber, paragraphIndex: first.paragraphIndex }
       : { chapterNumber: detail.chapters[0]?.chapterNumber ?? 1, paragraphIndex: 0 };
   });
-  const [showOriginal, setShowOriginal] = useState(false);
+  const [showCompare, setShowCompare] = useState(true);
+  // 이전 버전으로 무엇을 보여줄지: 원본(layer4Original) 또는 화면을 열었을 때의 저장본.
+  const [compareBase, setCompareBase] = useState<"original" | "opened">("original");
+  const [openedChapters] = useState<MasterChapter[]>(detail.chapters);
   const [showMemos, setShowMemos] = useState(true);
   const [showEdits, setShowEdits] = useState(true);
   const [busy, setBusy] = useState<"save" | "approve" | null>(null);
@@ -96,16 +105,57 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   const editedCount = countEditedParagraphs(chapters, detail.original);
   const allConfirmed = chapters.length > 0 && chapters.every((c) => confirmed.includes(c.chapterNumber));
   const locked = busy !== null || approved;
+
+  // ── 자동 임시 저장 ──
+  // 화면 글(chapters)은 건드리지 않고, 서버에 보낸 정규화본으로 baseline만 올린다(타이핑 중 커서·내용을 지키고,
+  // 저장하는 동안 이어 쓴 글은 계속 "저장 안 됨"으로 남는다).
+  async function autosaveSave(): Promise<AutosaveResult> {
+    if (!isReview) return { ok: true };
+    const normalized = chapters.map((c) => ({ ...c, paragraphs: normalizeParagraphs(c.paragraphs) }));
+    const edits = buildSaveEdits(normalized, baseline);
+    if (edits.length === 0 && sameNumbers(confirmed, savedConfirmed)) return { ok: true };
+    // 마스터 저장은 제목·본문이 빈 챕터를 거절한다. 글을 쓰다 잠깐 비는 순간은 오류가 아니라 건너뛴다.
+    const reason = findUnsavableReason(edits);
+    if (reason) return { skipped: reason };
+    const result = await saveMasterReviewAction({ sessionId: detail.id, edits, confirmedChapters: confirmed });
+    if (result.error) return { error: result.error };
+    setBaseline(normalized);
+    setSavedConfirmed(confirmed);
+    return { ok: true };
+  }
+  const autosave = useAutosave(autosaveSave);
+  const { notify: notifyAutosave, flush: flushAutosave } = autosave;
+
+  useEffect(() => {
+    if (dirty && !locked) notifyAutosave();
+  }, [chapters, confirmed, dirty, locked, notifyAutosave]);
+
+  // 문단을 옮기거나 화면이 가려질 때는 기다리지 않고 바로 저장한다.
+  useEffect(() => {
+    void flushAutosave();
+  }, [selected.chapterNumber, selected.paragraphIndex, flushAutosave]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") void flushAutosave();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  }, [flushAutosave]);
+
+  // 열 때부터 이미 원본과 다른 저장본이 있을 때만 "이전 버전" 선택창을 보여준다.
+  const hasOpenedDiff = useMemo(
+    () => isReview && chaptersDiffer(detail.chapters, detail.original),
+    [isReview, detail.chapters, detail.original],
+  );
   const currentChapter = chapters.find((c) => c.chapterNumber === selected.chapterNumber) ?? chapters[0];
-  const originalChapter = detail.original.find((c) => c.chapterNumber === currentChapter?.chapterNumber);
   // 문단을 지운 뒤 등으로 선택 위치가 범위를 벗어나면 마지막 문단으로 맞춘다.
   const paragraphIndex = currentChapter ? Math.min(selected.paragraphIndex, currentChapter.paragraphs.length - 1) : 0;
   const currentText = currentChapter?.paragraphs[paragraphIndex] ?? "";
-  // 문단 수가 같을 때만 같은 위치의 원본 문단을 비교 대상으로 보여준다(구조가 바뀌면 짝이 맞지 않는다).
-  const originalText =
-    originalChapter && currentChapter && originalChapter.paragraphs.length === currentChapter.paragraphs.length
-      ? originalChapter.paragraphs[paragraphIndex]
-      : undefined;
+  // 문단 수가 같을 때만 같은 위치의 이전 버전 문단을 비교 대상으로 보여준다(구조가 바뀌면 짝이 맞지 않는다).
+  const compareText = currentChapter
+    ? pairedParagraph(compareBase === "opened" ? openedChapters : detail.original, currentChapter.chapterNumber, paragraphIndex, currentChapter.paragraphs.length)
+    : undefined;
 
   function updateChapter(chapterNumber: number, update: (c: MasterChapter) => MasterChapter) {
     setSavedAt(false);
@@ -186,12 +236,14 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
 
   async function handleSave() {
     setBusy("save");
+    await flushAutosave();
     await save();
     setBusy(null);
   }
 
   async function handleApprove() {
     setBusy("approve");
+    await flushAutosave();
     if (!(await save())) {
       setBusy(null);
       return;
@@ -321,9 +373,22 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
             </div>
             <span className="flex-1" />
             {view === "edit" ? (
-              <Button type="button" size="lg" variant="outline" aria-pressed={showOriginal} onClick={() => setShowOriginal((v) => !v)}>
-                원본과 비교
-              </Button>
+              <>
+                {hasOpenedDiff && showCompare && (
+                  <select
+                    aria-label="이전 버전 선택"
+                    value={compareBase}
+                    onChange={(e) => setCompareBase(e.target.value as "original" | "opened")}
+                    className="h-10 rounded-lg border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="original">원본</option>
+                    <option value="opened">열었을 때</option>
+                  </select>
+                )}
+                <Button type="button" size="lg" variant="outline" aria-pressed={showCompare} onClick={() => setShowCompare((v) => !v)}>
+                  나란히 보기
+                </Button>
+              </>
             ) : (
               <>
                 {isReview && (
@@ -336,6 +401,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                 </Button>
               </>
             )}
+            <SaveStatusChip status={autosave.status} onRetry={() => void flushAutosave()} />
             <DownloadButton onSelect={handleDownload} />
             <Button type="button" size="lg" variant="outline" disabled={locked || !dirty} onClick={handleSave}>
               {busy === "save" ? "저장 중…" : savedAt && !dirty ? (isReview ? "임시 저장됨" : "저장됨") : isReview ? "임시 저장" : "저장"}
@@ -449,9 +515,9 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                 paragraphIndex={paragraphIndex}
                 paragraphCount={currentChapter.paragraphs.length}
                 text={currentText}
-                compareText={originalText}
-                compareLabel="원본"
-                showCompare={showOriginal}
+                compareText={compareText}
+                compareLabel={compareBase === "opened" ? "열었을 때" : "원본"}
+                showCompare={showCompare}
                 disabled={locked}
                 onTextChange={(text) => updateParagraph(currentChapter.chapterNumber, paragraphIndex, text)}
                 onInsert={(where) => insertAt(currentChapter.chapterNumber, paragraphIndex + (where === "below" ? 1 : 0))}
