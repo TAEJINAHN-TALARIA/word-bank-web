@@ -43,7 +43,24 @@ export type EditorDetail = {
   confirmedChapters: number[];
   gateNote: string | null;
   preReview: PreReviewItem[] | null;
+  // 게시본 편집에서만 채운다: 열 당시 게시 버전과 이어 쓰던 초안.
+  contentVersion?: number;
+  draft?: PublishedDraft | null;
 };
+
+export type DraftEdit = { num: number; paragraphs: string[] };
+
+// 게시본 초안(publishedDrafts/{docId}). stale이면 초안을 만든 뒤 게시본이 바뀐 것이다.
+export type PublishedDraft = {
+  edits: DraftEdit[];
+  baseContentVersion: number;
+  updatedAt: number;
+  stale: boolean;
+};
+
+export const PUBLISHED_DRAFTS_COLLECTION = "publishedDrafts";
+// Firestore 문서 한도(1MiB) 안에 들도록: 한글 3바이트 기준으로 여유를 둔 글자 수.
+export const MAX_DRAFT_CHARS = 250_000;
 
 // story-generator의 bodyToParagraphs(publishService.js)와 같은 규칙이어야 저장→게시 왕복에서 본문이 어긋나지 않는다.
 export function bodyToParagraphs(body: string): string[] {
@@ -234,4 +251,56 @@ export function editedParagraphKeys(current: MasterChapter[], original: MasterCh
     });
   }
   return keys;
+}
+
+// ── 자동 임시 저장·게시본 초안·나란히 보기 ──
+
+// 마스터 저장 API는 바뀐 챕터의 제목·본문이 비면 거절한다(validateMasterReviewSave). 글을 쓰다 잠깐 비는 순간에는
+// 자동 저장이 오류 대신 건너뛰도록, 보내기 전에 같은 조건을 미리 본다.
+export function findUnsavableReason(edits: { chapterNumber: number; chapterTitle: string; body: string }[]): string | null {
+  for (const edit of edits) {
+    if (!edit.chapterTitle.trim()) return `${edit.chapterNumber}장 제목이 비어 있어요`;
+    if (!edit.body.trim()) return `${edit.chapterNumber}장 본문이 비어 있어요`;
+  }
+  return null;
+}
+
+// 초안의 edits를 게시본 챕터에 얹는다. 해당 번호 챕터의 문단만 바꾸고 입력은 그대로 둔다.
+export function applyPublishedEdits(chapters: MasterChapter[], edits: DraftEdit[]): MasterChapter[] {
+  const byNum = new Map(edits.map((e) => [e.num, e.paragraphs]));
+  return chapters.map((c) => (byNum.has(c.chapterNumber) ? { ...c, paragraphs: [...(byNum.get(c.chapterNumber) as string[])] } : c));
+}
+
+// 서버가 클라이언트에서 받은(또는 저장소에서 읽은) 초안의 모양과 크기를 확인한다.
+export function isValidDraftEdits(value: unknown): value is DraftEdit[] {
+  if (!Array.isArray(value)) return false;
+  const seen = new Set<number>();
+  let total = 0;
+  for (const e of value) {
+    if (!e || !Number.isInteger(e.num) || seen.has(e.num)) return false;
+    if (!Array.isArray(e.paragraphs) || !e.paragraphs.every((p: unknown) => typeof p === "string")) return false;
+    seen.add(e.num);
+    total += e.paragraphs.reduce((n: number, p: string) => n + p.length, 0);
+  }
+  return total <= MAX_DRAFT_CHARS;
+}
+
+// 두 원고가 정규화한 뒤에도 다른지(제목·문단·챕터 수).
+export function chaptersDiffer(a: MasterChapter[], b: MasterChapter[]): boolean {
+  if (a.length !== b.length) return true;
+  return a.some((c) => {
+    const other = b.find((o) => o.chapterNumber === c.chapterNumber);
+    return !other || isChapterEdited(c, other);
+  });
+}
+
+// 문단 수가 같을 때만 같은 위치의 이전 버전 문단을 비교 대상으로 쓴다(구조가 바뀌면 짝이 맞지 않는다).
+export function pairedParagraph(
+  base: MasterChapter[],
+  chapterNumber: number,
+  paragraphIndex: number,
+  paragraphCount: number,
+): string | undefined {
+  const chapter = base.find((c) => c.chapterNumber === chapterNumber);
+  return chapter && chapter.paragraphs.length === paragraphCount ? chapter.paragraphs[paragraphIndex] : undefined;
 }

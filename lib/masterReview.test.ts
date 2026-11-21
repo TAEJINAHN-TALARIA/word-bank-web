@@ -14,6 +14,12 @@ import {
   moveParagraph,
   locateMemos,
   editedParagraphKeys,
+  findUnsavableReason,
+  applyPublishedEdits,
+  isValidDraftEdits,
+  chaptersDiffer,
+  pairedParagraph,
+  MAX_DRAFT_CHARS,
   type MasterChapter,
   type PreReviewItem,
 } from "./masterReview";
@@ -234,5 +240,99 @@ describe("locateMemos / editedParagraphKeys (문단 위치가 아니라 내용�
 
   it("바뀐 게 없으면 비어 있다", () => {
     expect(editedParagraphKeys(loaded, loaded).size).toBe(0);
+  });
+});
+
+describe("findUnsavableReason", () => {
+  const edit = (chapterNumber: number, chapterTitle: string, body: string) => ({ chapterNumber, chapterTitle, body });
+
+  it("저장할 수 있으면 null이다", () => {
+    expect(findUnsavableReason([edit(1, "첫째", "본문")])).toBeNull();
+    expect(findUnsavableReason([])).toBeNull();
+  });
+
+  it("제목이나 본문이 공백뿐이면 그 장과 이유를 알려준다", () => {
+    expect(findUnsavableReason([edit(2, "  ", "본문")])).toBe("2장 제목이 비어 있어요");
+    expect(findUnsavableReason([edit(3, "셋째", " \n ")])).toBe("3장 본문이 비어 있어요");
+  });
+
+  it("문제가 여럿이면 순서상 첫 문제만 알려준다", () => {
+    expect(findUnsavableReason([edit(1, "첫째", "본문"), edit(4, "", ""), edit(2, "", "x")])).toBe("4장 제목이 비어 있어요");
+  });
+});
+
+describe("applyPublishedEdits", () => {
+  const chapters = [chapter(1, ["가", "나"]), chapter(2, ["다"])];
+
+  it("해당 번호 챕터의 문단만 바꾸고 제목·나머지 챕터는 그대로 둔다", () => {
+    const next = applyPublishedEdits(chapters, [{ num: 2, paragraphs: ["새 문단", "하나 더"] }]);
+    expect(next).toEqual([chapter(1, ["가", "나"]), chapter(2, ["새 문단", "하나 더"])]);
+  });
+
+  it("없는 번호는 무시하고 입력을 바꾸지 않는다", () => {
+    const snapshot = JSON.parse(JSON.stringify(chapters));
+    expect(applyPublishedEdits(chapters, [{ num: 9, paragraphs: ["x"] }])).toEqual(chapters);
+    applyPublishedEdits(chapters, [{ num: 1, paragraphs: ["바뀜"] }]);
+    expect(chapters).toEqual(snapshot);
+  });
+});
+
+describe("isValidDraftEdits", () => {
+  it("빈 목록과 정상 목록은 통과한다", () => {
+    expect(isValidDraftEdits([])).toBe(true);
+    expect(isValidDraftEdits([{ num: 1, paragraphs: ["가"] }, { num: 2, paragraphs: [] }])).toBe(true);
+  });
+
+  it("모양이 틀리면 거절한다", () => {
+    expect(isValidDraftEdits(undefined)).toBe(false);
+    expect(isValidDraftEdits({ num: 1, paragraphs: ["가"] })).toBe(false);
+    expect(isValidDraftEdits([{ num: 1.5, paragraphs: ["가"] }])).toBe(false);
+    expect(isValidDraftEdits([{ num: "1", paragraphs: ["가"] }])).toBe(false);
+    expect(isValidDraftEdits([{ num: 1, paragraphs: ["가", 2] }])).toBe(false);
+    expect(isValidDraftEdits([{ num: 1, paragraphs: "가" }])).toBe(false);
+    expect(isValidDraftEdits([null])).toBe(false);
+  });
+
+  it("같은 장이 두 번 나오면 거절한다", () => {
+    expect(isValidDraftEdits([{ num: 1, paragraphs: ["가"] }, { num: 1, paragraphs: ["나"] }])).toBe(false);
+  });
+
+  it("글자 수 합이 상한을 넘으면 거절하고 정확히 상한이면 통과한다", () => {
+    expect(isValidDraftEdits([{ num: 1, paragraphs: ["가".repeat(MAX_DRAFT_CHARS)] }])).toBe(true);
+    expect(isValidDraftEdits([{ num: 1, paragraphs: ["가".repeat(MAX_DRAFT_CHARS), "나"] }])).toBe(false);
+  });
+});
+
+describe("chaptersDiffer", () => {
+  it("정규화하면 같은 글은 다르지 않다(문단 안 빈 줄만 다름)", () => {
+    expect(chaptersDiffer([chapter(1, ["가\n\n나"])], [chapter(1, ["가", "나"])])).toBe(false);
+  });
+
+  it("제목, 문단, 챕터 수가 다르면 다르다", () => {
+    expect(chaptersDiffer([{ ...chapter(1, ["가"]), chapterTitle: "바뀜" }], [chapter(1, ["가"])])).toBe(true);
+    expect(chaptersDiffer([chapter(1, ["가"])], [chapter(1, ["나"])])).toBe(true);
+    expect(chaptersDiffer([chapter(1, ["가"]), chapter(2, ["나"])], [chapter(1, ["가"])])).toBe(true);
+  });
+});
+
+describe("pairedParagraph", () => {
+  const base = [chapter(1, ["가", "나", "다"])];
+
+  it("문단 수가 같을 때만 같은 위치의 문단을 돌려준다", () => {
+    expect(pairedParagraph(base, 1, 1, 3)).toBe("나");
+    expect(pairedParagraph(base, 1, 1, 4)).toBeUndefined();
+  });
+
+  it("챕터가 없거나 위치가 범위를 벗어나면 undefined다", () => {
+    expect(pairedParagraph(base, 2, 0, 3)).toBeUndefined();
+    expect(pairedParagraph(base, 1, 5, 3)).toBeUndefined();
+  });
+});
+
+describe("자동 저장은 화면 글을 정규화하지 않고도 dirty를 맞게 계산한다", () => {
+  it("빈 문단·문단 안 빈 줄이 섞인 화면 글을 정규화한 기준과 비교하면 바뀐 게 없다", () => {
+    const onScreen = [chapter(1, ["가", "", "나\n\n다", "   "])];
+    const baseline = onScreen.map((c) => ({ ...c, paragraphs: normalizeParagraphs(c.paragraphs) }));
+    expect(buildSaveEdits(onScreen, baseline)).toEqual([]);
   });
 });
