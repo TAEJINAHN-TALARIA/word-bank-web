@@ -17,6 +17,8 @@ import {
   findUnsavableReason,
   applyPublishedEdits,
   isValidDraftEdits,
+  findUnsavableDraftReason,
+  canApplyToLive,
   chaptersDiffer,
   pairedParagraph,
   MAX_DRAFT_CHARS,
@@ -269,6 +271,10 @@ describe("applyPublishedEdits", () => {
     expect(next).toEqual([chapter(1, ["가", "나"]), chapter(2, ["새 문단", "하나 더"])]);
   });
 
+  it("문단이 비어 있는 초안은 얹지 않는다(그 장의 문단이 사라지지 않게)", () => {
+    expect(applyPublishedEdits(chapters, [{ num: 1, paragraphs: [] }, { num: 2, paragraphs: ["  "] }])).toEqual(chapters);
+  });
+
   it("없는 번호는 무시하고 입력을 바꾸지 않는다", () => {
     const snapshot = JSON.parse(JSON.stringify(chapters));
     expect(applyPublishedEdits(chapters, [{ num: 9, paragraphs: ["x"] }])).toEqual(chapters);
@@ -280,7 +286,12 @@ describe("applyPublishedEdits", () => {
 describe("isValidDraftEdits", () => {
   it("빈 목록과 정상 목록은 통과한다", () => {
     expect(isValidDraftEdits([])).toBe(true);
-    expect(isValidDraftEdits([{ num: 1, paragraphs: ["가"] }, { num: 2, paragraphs: [] }])).toBe(true);
+    expect(isValidDraftEdits([{ num: 1, paragraphs: ["가"] }, { num: 2, paragraphs: ["나", ""] }])).toBe(true);
+  });
+
+  it("문단이 없거나 공백뿐인 장은 거절한다 — 그대로 열면 고칠 문단이 없어 입력창이 막힌다", () => {
+    expect(isValidDraftEdits([{ num: 1, paragraphs: [] }])).toBe(false);
+    expect(isValidDraftEdits([{ num: 1, paragraphs: ["  ", ""] }])).toBe(false);
   });
 
   it("모양이 틀리면 거절한다", () => {
@@ -334,5 +345,35 @@ describe("자동 저장은 화면 글을 정규화하지 않고도 dirty를 맞�
     const onScreen = [chapter(1, ["가", "", "나\n\n다", "   "])];
     const baseline = onScreen.map((c) => ({ ...c, paragraphs: normalizeParagraphs(c.paragraphs) }));
     expect(buildSaveEdits(onScreen, baseline)).toEqual([]);
+  });
+});
+
+describe("findUnsavableDraftReason", () => {
+  it("모든 장에 글이 있으면 null이다", () => {
+    expect(findUnsavableDraftReason([])).toBeNull();
+    expect(findUnsavableDraftReason([{ num: 1, paragraphs: ["가"] }])).toBeNull();
+  });
+
+  it("장의 문단을 모두 지웠거나 공백뿐이면 그 장을 알려준다(첫 문제만)", () => {
+    expect(findUnsavableDraftReason([{ num: 2, paragraphs: [] }])).toBe("2장 본문이 비어 있어요");
+    expect(findUnsavableDraftReason([{ num: 1, paragraphs: ["가"] }, { num: 3, paragraphs: [" ", ""] }, { num: 4, paragraphs: [] }])).toBe(
+      "3장 본문이 비어 있어요",
+    );
+  });
+});
+
+describe("canApplyToLive", () => {
+  const live = [chapter(1, ["가"])];
+
+  it("게시된 글과 다르면 반영할 수 있다", () => {
+    expect(canApplyToLive([chapter(1, ["고침"])], live, false)).toBe(true);
+  });
+
+  it("게시된 글과 같으면 반영할 것이 없다", () => {
+    expect(canApplyToLive(live, live, false)).toBe(false);
+  });
+
+  it("게시본이 바뀐 뒤의 옛 초안이 남아 있으면 먼저 불러오거나 버릴 때까지 반영할 수 없다(옛 초안이 조용히 지워지지 않게)", () => {
+    expect(canApplyToLive([chapter(1, ["고침"])], live, true)).toBe(false);
   });
 });

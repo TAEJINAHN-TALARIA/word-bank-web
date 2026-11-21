@@ -17,7 +17,7 @@ export function createAutosaver(options: {
   delayMs: number;
   save: () => Promise<AutosaveResult>;
   onStatus: (status: AutosaveStatus) => void;
-}): { notify(): void; flush(): Promise<void>; cancel(): void } {
+}): { notify(): void; flush(): Promise<void>; cancel(): void; dispose(): Promise<void> } {
   let status: AutosaveStatus = { kind: "idle" };
   let timer: ReturnType<typeof setTimeout> | null = null;
   let inFlight: Promise<void> | null = null;
@@ -69,36 +69,45 @@ export function createAutosaver(options: {
     return inFlight;
   }
 
-  return {
-    notify() {
-      if (cancelled) return;
-      if (inFlight) {
-        changedWhileSaving = true;
-        return;
-      }
-      setStatus({ kind: "pending" });
-      schedule();
-    },
+  function notify() {
+    if (cancelled) return;
+    if (inFlight) {
+      changedWhileSaving = true;
+      return;
+    }
+    setStatus({ kind: "pending" });
+    schedule();
+  }
 
-    // 대기 중인 저장을 지금 끝낸다(문단 이동·화면 이탈·승인 직전). 실패·건너뜀 상태면 다시 시도한다.
-    async flush() {
+  // 대기 중인 저장을 지금 끝낸다(문단 이동·화면 이탈·승인 직전). 실패·건너뜀 상태면 다시 시도한다.
+  async function flush() {
+    if (cancelled) return;
+    const retryLastResult = !inFlight && (status.kind === "failed" || status.kind === "skipped");
+    if (inFlight) await inFlight;
+    for (let round = 0; round < 2; round++) {
       if (cancelled) return;
-      const retryLastResult = !inFlight && (status.kind === "failed" || status.kind === "skipped");
-      if (inFlight) await inFlight;
-      for (let round = 0; round < 2; round++) {
-        if (cancelled) return;
-        if (status.kind === "pending" || (round === 0 && retryLastResult)) {
-          clearTimer();
-          await run();
-        } else break;
-      }
-    },
+      if (status.kind === "pending" || (round === 0 && retryLastResult)) {
+        clearTimer();
+        await run();
+      } else break;
+    }
+  }
 
-    cancel() {
-      cancelled = true;
-      clearTimer();
-    },
-  };
+  function cancel() {
+    cancelled = true;
+    clearTimer();
+  }
+
+  // 화면을 떠날 때: 이어 쓴 글을 마저 저장한 뒤 닫는다(cancel만 하면 지연 중이던 저장이 사라진다).
+  async function dispose() {
+    try {
+      await flush();
+    } finally {
+      cancel();
+    }
+  }
+
+  return { notify, flush, cancel, dispose };
 }
 
 export function formatClock(at: number): string {

@@ -265,9 +265,12 @@ export function findUnsavableReason(edits: { chapterNumber: number; chapterTitle
   return null;
 }
 
+const hasText = (paragraphs: string[]) => paragraphs.some((p) => p.trim());
+
 // 초안의 edits를 게시본 챕터에 얹는다. 해당 번호 챕터의 문단만 바꾸고 입력은 그대로 둔다.
+// 문단이 하나도 없는 초안은 얹지 않는다(게시본에서는 문단을 새로 추가할 수 없어, 열었을 때 입력창이 막힌다).
 export function applyPublishedEdits(chapters: MasterChapter[], edits: DraftEdit[]): MasterChapter[] {
-  const byNum = new Map(edits.map((e) => [e.num, e.paragraphs]));
+  const byNum = new Map(edits.filter((e) => hasText(e.paragraphs)).map((e) => [e.num, e.paragraphs]));
   return chapters.map((c) => (byNum.has(c.chapterNumber) ? { ...c, paragraphs: [...(byNum.get(c.chapterNumber) as string[])] } : c));
 }
 
@@ -279,10 +282,25 @@ export function isValidDraftEdits(value: unknown): value is DraftEdit[] {
   for (const e of value) {
     if (!e || !Number.isInteger(e.num) || seen.has(e.num)) return false;
     if (!Array.isArray(e.paragraphs) || !e.paragraphs.every((p: unknown) => typeof p === "string")) return false;
+    if (!hasText(e.paragraphs)) return false;
     seen.add(e.num);
     total += e.paragraphs.reduce((n: number, p: string) => n + p.length, 0);
   }
   return total <= MAX_DRAFT_CHARS;
+}
+
+// 게시본 초안을 저장하기 전에 본다: 장의 문단을 모두 지운 순간은 오류가 아니라 건너뛴다(서버가 거절하는 모양이기도 하다).
+export function findUnsavableDraftReason(edits: DraftEdit[]): string | null {
+  for (const edit of edits) {
+    if (!hasText(edit.paragraphs)) return `${edit.num}장 본문이 비어 있어요`;
+  }
+  return null;
+}
+
+// 게시본에 반영할 수 있는지: 게시된 글과 다르고, 게시본이 바뀐 뒤의 옛 초안이 남아 있지 않을 때.
+// 옛 초안이 남아 있으면 반영 때 서버가 그 초안을 조용히 지우므로, 먼저 불러오거나 버리게 한다.
+export function canApplyToLive(chapters: MasterChapter[], liveBaseline: MasterChapter[], hasStaleDraft: boolean): boolean {
+  return !hasStaleDraft && buildPublishedEdits(chapters, liveBaseline).length > 0;
 }
 
 // 두 원고가 정규화한 뒤에도 다른지(제목·문단·챕터 수).

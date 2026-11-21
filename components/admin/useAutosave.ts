@@ -5,7 +5,7 @@ import { AUTOSAVE_DELAY_MS, createAutosaver, type AutosaveResult, type AutosaveS
 
 /**
  * createAutosaver를 컴포넌트에 붙인다. save는 매 렌더의 최신 함수를 쓰므로 호출 시점의 화면 상태를 읽는다.
- * 언마운트하면 대기 중인 저장을 취소한다.
+ * 언마운트하면(목록으로 이동 등) 대기 중인 저장을 마저 끝내고 닫는다.
  */
 export function useAutosave(save: () => Promise<AutosaveResult>): {
   status: AutosaveStatus;
@@ -24,7 +24,7 @@ export function useAutosave(save: () => Promise<AutosaveResult>): {
     const autosaver = createAutosaver({ delayMs: AUTOSAVE_DELAY_MS, save: () => saveRef.current(), onStatus: setStatus });
     autosaverRef.current = autosaver;
     return () => {
-      autosaver.cancel();
+      void autosaver.dispose();
       autosaverRef.current = null;
     };
   }, []);

@@ -13,9 +13,11 @@ import {
   applyPublishedEdits,
   buildPublishedEdits,
   buildSaveEdits,
+  canApplyToLive,
   chaptersDiffer,
   countEditedParagraphs,
   editedParagraphKeys,
+  findUnsavableDraftReason,
   findUnsavableReason,
   insertParagraph,
   locateMemos,
@@ -108,7 +110,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
     ? buildSaveEdits(chapters, baseline).length > 0 || !sameNumbers(confirmed, savedConfirmed)
     : buildPublishedEdits(chapters, baseline).length > 0;
   // 게시본에 반영할 수 있는 글(게시된 글과 다름). dirty는 "초안으로도 아직 저장 안 됨"이다.
-  const canApply = !isReview && buildPublishedEdits(chapters, liveBaseline).length > 0;
+  const canApply = !isReview && canApplyToLive(chapters, liveBaseline, staleDraft !== null);
 
   useEffect(() => {
     if (!dirty || approved) return;
@@ -131,6 +133,8 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
       // 게시본이 바뀐 뒤의 옛 초안이 남아 있으면 새 초안이 그것을 덮어쓰지 않게, 먼저 불러오거나 버리게 한다.
       if (staleDraft) return { skipped: "이전 초안을 먼저 불러오거나 버려 주세요" };
       const draftEdits = buildPublishedEdits(normalized, liveBaseline);
+      const emptied = findUnsavableDraftReason(draftEdits);
+      if (emptied) return { skipped: emptied };
       const saved = await savePublishedDraftAction({ docId: detail.id, edits: draftEdits, baseContentVersion: liveVersion });
       if (saved.error) return { error: saved.error };
       setBaseline(normalized);
@@ -148,6 +152,11 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
     setSavedConfirmed(confirmed);
     return { ok: true };
   }
+  // 저장·반영·승인·초안 버리기 중에는 자동 저장이 끼어들지 않게, 효과·이벤트에서 읽는 최신 잠금 상태.
+  const lockedRef = useRef(locked);
+  useEffect(() => {
+    lockedRef.current = locked;
+  });
   const autosave = useAutosave(autosaveSave);
   const { notify: notifyAutosave, flush: flushAutosave } = autosave;
 
@@ -157,12 +166,12 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
 
   // 문단을 옮기거나 화면이 가려질 때는 기다리지 않고 바로 저장한다.
   useEffect(() => {
-    void flushAutosave();
+    if (!lockedRef.current) void flushAutosave();
   }, [selected.chapterNumber, selected.paragraphIndex, flushAutosave]);
 
   useEffect(() => {
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") void flushAutosave();
+      if (document.visibilityState === "hidden" && !lockedRef.current) void flushAutosave();
     };
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
@@ -248,6 +257,11 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
         return false;
       }
       const draftEdits = buildPublishedEdits(normalized, liveBaseline);
+      const emptied = findUnsavableDraftReason(draftEdits);
+      if (emptied) {
+        setError(emptied);
+        return false;
+      }
       const result = await savePublishedDraftAction({ docId: detail.id, edits: draftEdits, baseContentVersion: liveVersion });
       if (result.error) {
         setError(result.error);
@@ -297,16 +311,20 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
 
   async function handleDiscardDraft() {
     if (!window.confirm("초안을 버리고 게시된 내용으로 되돌릴까요?")) return;
+    // 지우는 동안 입력과 자동 저장을 막아, 쓰던 글이 덮이거나 지운 초안이 다시 만들어지지 않게 한다.
+    setBusy("save");
     await flushAutosave();
     const result = await discardPublishedDraftAction(detail.id);
     if (result.error) {
       setError(result.error);
+      setBusy(null);
       return;
     }
     setError(null);
     setChapters(liveBaseline);
     setBaseline(liveBaseline);
     setDraftInfo(null);
+    setBusy(null);
   }
 
   // 게시본이 바뀐 뒤의 옛 초안: 불러오면 그 장의 문단이 초안 내용으로 바뀐다. baseline은 그대로라 곧 새 버전 기준으로 자동 저장된다.

@@ -197,6 +197,35 @@ describe("createAutosaver", () => {
     });
   });
 
+  describe("dispose", () => {
+    it("대기 중인 저장을 끝낸 뒤 취소한다(화면을 떠나도 이어 쓴 글을 잃지 않는다)", async () => {
+      const save = vi.fn().mockResolvedValue({ ok: true });
+      const { autosaver } = setup(save);
+
+      autosaver.notify();
+      await autosaver.dispose();
+      expect(save).toHaveBeenCalledTimes(1);
+
+      autosaver.notify();
+      await vi.advanceTimersByTimeAsync(DELAY * 3);
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+
+    it("저장하는 동안 이어 쓴 글도 마저 저장한다", async () => {
+      const first = deferred<AutosaveResult>();
+      const save = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue({ ok: true });
+      const { autosaver } = setup(save);
+
+      autosaver.notify();
+      await vi.advanceTimersByTimeAsync(DELAY);
+      autosaver.notify();
+      const disposing = autosaver.dispose();
+      first.resolve({ ok: true });
+      await disposing;
+      expect(save).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("cancel 뒤에는 저장도 상태 알림도 없다", async () => {
     const save = vi.fn().mockResolvedValue({ ok: true });
     const { autosaver, statuses } = setup(save);
