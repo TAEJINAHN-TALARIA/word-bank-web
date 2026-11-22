@@ -2,6 +2,9 @@
 // "server-only"를 import하지 않으므로 클라이언트 컴포넌트에서도 가져올 수 있다.
 // 설계: docs/superpowers/specs/2026-11-21-editor-chat-and-download-design.md
 
+import { chaptersKey } from "@/lib/qualityCheck";
+import type { MasterChapter } from "@/lib/masterReview";
+
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
 // 편집자가 화면에서 보고 있는 곳: 문단, 소설 제목, 장 제목. 전체 읽기 화면이면 null.
@@ -33,13 +36,31 @@ export function focusLine(focus: ChatFocus): string {
   return `[지금 보는 곳: ${focus.chapterNumber}장 ${focus.paragraphIndex + 1}문단]`;
 }
 
-// 이전 대화가 매 요청 같은 모양으로 재전송되어 캐시가 깨지지 않도록, 포커스 줄은 보낼 때의 값으로 메시지에 박아 둔다.
-export function withFocus(text: string, focus: ChatFocus): string {
-  return `${focusLine(focus)}\n${text}`;
+// 지난 전송 뒤에 원고가 바뀌었음을 Claude에게 알리는 줄. 시스템 프롬프트(buildChatSystemPrompt)가 이 줄의 뜻을 설명한다.
+export const EDITED_NOTICE = "[참고: 직전 질문 뒤에 원고가 수정됐어요]";
+
+// 이전 대화가 매 요청 같은 모양으로 재전송되어 캐시가 깨지지 않도록, 포커스 줄과 알림 줄은 보낼 때의 값으로 메시지에 박아 둔다.
+export function withFocus(text: string, focus: ChatFocus, options?: { manuscriptEdited?: boolean }): string {
+  const notice = options?.manuscriptEdited ? `${EDITED_NOTICE}\n` : "";
+  return `${focusLine(focus)}\n${notice}${text}`;
 }
 
+const FOCUS_PREFIX = /^\[지금 보는 곳: [^\]\n]*\]\n/;
+const NOTICE_PREFIX = new RegExp(`^${EDITED_NOTICE.replace(/[[\]]/g, "\\$&")}\n`);
+
 export function stripFocus(content: string): string {
-  return content.replace(/^\[지금 보는 곳: [^\]\n]*\]\n/, "");
+  const withoutFocus = content.replace(FOCUS_PREFIX, "");
+  return withoutFocus === content ? content : withoutFocus.replace(NOTICE_PREFIX, "");
+}
+
+// 원고가 바뀌었는지 비교하는 열쇠: 장 번호·제목·정규화한 문단(chaptersKey)과 편집 중인 소설 제목(양끝 공백 뺌).
+export function manuscriptKey(chapters: MasterChapter[], title?: string): string {
+  return `${chaptersKey(chapters)}\n${(title ?? "").trim()}`;
+}
+
+// 이전 전송이 없으면(첫 전송, 대화를 지운 직후) 비교할 옛 답변이 없으므로 수정으로 보지 않는다.
+export function manuscriptEdited(previousKey: string | null, currentKey: string): boolean {
+  return previousKey !== null && previousKey !== currentKey;
 }
 
 // 요청에 실을 기록을 한도 안으로 줄인다 — 오래된 것부터 버리고, 첫 메시지는 user여야 하므로 앞쪽 assistant는 더 버린다.
