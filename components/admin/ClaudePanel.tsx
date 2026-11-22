@@ -221,6 +221,7 @@ export function ClaudePanel({
             onDraftChange={setChatDraft}
             onSend={(text) => void chat.send(text, { chapters, focus: chatFocus, ...(novelTitle?.trim() && { title: novelTitle }) })}
             onStop={chat.stop}
+            onClear={chat.clear}
           />
         </TabsContent>
         {quality && (

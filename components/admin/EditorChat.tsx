@@ -37,6 +37,7 @@ export function EditorChat({
   onDraftChange,
   onSend,
   onStop,
+  onClear,
 }: {
   turns: ChatTurn[];
   sending: boolean;
@@ -50,6 +51,8 @@ export function EditorChat({
   onDraftChange: (draft: string) => void;
   onSend: (text: string) => void;
   onStop: () => void;
+  // 대화(와 Claude가 기억하는 기록)를 모두 지운다. 입력 중인 글과 대상 선택은 그대로 둔다.
+  onClear: () => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -64,6 +67,12 @@ export function EditorChat({
     if (!text || busy) return;
     onDraftChange("");
     onSend(text);
+  }
+
+  function clear() {
+    // 저장해 둔 곳이 없어 되돌릴 수 없으므로 한 번 확인한다(버튼은 대화가 있을 때만 켜진다).
+    if (!window.confirm("대화를 모두 지울까요? 되돌릴 수 없어요.")) return;
+    onClear();
   }
 
   return (
@@ -84,7 +93,12 @@ export function EditorChat({
           ))}
         </div>
       )}
-      <p className="text-xs leading-snug text-muted-foreground">{focusSummary(focus)}</p>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs leading-snug text-muted-foreground">{focusSummary(focus)}</p>
+        <Button type="button" size="sm" variant="ghost" className="shrink-0" disabled={turns.length === 0} onClick={clear}>
+          대화 지우기
+        </Button>
+      </div>
 
       <div ref={listRef} role="log" aria-live="polite" className="flex max-h-[28rem] min-h-24 flex-col gap-2 overflow-y-auto">
         {turns.length === 0 && (
