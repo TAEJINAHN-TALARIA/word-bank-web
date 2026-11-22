@@ -71,6 +71,18 @@ describe("saveMasterReviewAction", () => {
     expect(cache.revalidatePath).toHaveBeenCalledWith("/admin/edit");
   });
 
+  it("제목을 함께 저장하면 함수에 title을 넘긴다", async () => {
+    expect(await saveMasterReviewAction({ sessionId: "s1", edits: [], confirmedChapters: [1], title: "새 제목" })).toEqual({});
+    expect(generator.saveMasterReview).toHaveBeenCalledWith("s1", [], [1], "새 제목");
+  });
+
+  it("빈 제목이면 함수를 부르지 않고 error를 돌려준다", async () => {
+    expect(await saveMasterReviewAction({ sessionId: "s1", edits: [], confirmedChapters: [], title: "  " })).toEqual({
+      error: "소설 제목이 비어 있어요",
+    });
+    expect(generator.saveMasterReview).not.toHaveBeenCalled();
+  });
+
   it("함수 호출이 실패하면 메시지를 error로 돌려준다", async () => {
     vi.mocked(generator.saveMasterReview).mockRejectedValueOnce(new Error("본문이 비어 있습니다"));
     expect(await saveMasterReviewAction({ sessionId: "s1", edits: [], confirmedChapters: [] })).toEqual({ error: "본문이 비어 있습니다" });

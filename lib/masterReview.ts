@@ -255,6 +255,17 @@ export function editedParagraphKeys(current: MasterChapter[], original: MasterCh
 
 // ── 자동 임시 저장·게시본 초안·나란히 보기 ──
 
+// 소설 제목 한도. story-generator의 validateMasterReviewSave(소설 제목은 1~120자)와 같아야 한다.
+export const MAX_TITLE_CHARS = 120;
+
+// 마스터 저장 API는 제목이 비거나 한도를 넘으면 거절한다. 자동 저장이 오류 대신 건너뛰도록 보내기 전에 같은 조건을 미리 본다.
+export function findUnsavableTitle(title: string): string | null {
+  const trimmed = title.trim();
+  if (!trimmed) return "소설 제목이 비어 있어요";
+  if (trimmed.length > MAX_TITLE_CHARS) return `소설 제목은 ${MAX_TITLE_CHARS}자까지예요`;
+  return null;
+}
+
 // 마스터 저장 API는 바뀐 챕터의 제목·본문이 비면 거절한다(validateMasterReviewSave). 글을 쓰다 잠깐 비는 순간에는
 // 자동 저장이 오류 대신 건너뛰도록, 보내기 전에 같은 조건을 미리 본다.
 export function findUnsavableReason(edits: { chapterNumber: number; chapterTitle: string; body: string }[]): string | null {

@@ -101,8 +101,18 @@ export async function saveMasterReview(
   sessionId: string,
   edits: MasterEdit[],
   confirmedChapters: number[],
+  title?: string,
 ): Promise<void> {
-  await postAdmin("adminSaveMasterReview", { sessionId, edits, confirmedChapters }, "저장 실패");
+  const trimmed = title?.trim();
+  const data = await postAdmin(
+    "adminSaveMasterReview",
+    { sessionId, edits, confirmedChapters, ...(trimmed !== undefined && { title: trimmed }) },
+    "저장 실패",
+  );
+  // 제목 저장을 모르는 옛 함수는 title을 조용히 무시한다. 저장된 값이 돌아오지 않으면 저장된 것으로 치지 않는다.
+  if (trimmed !== undefined && data.title !== trimmed) {
+    throw new Error("서버가 제목 저장을 지원하지 않아요 — 함수 배포를 확인해 주세요");
+  }
 }
 
 export type ApproveMasterReviewResult = { resume: "batch" | "onDemand"; warnings: string[] };

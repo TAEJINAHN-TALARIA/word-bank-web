@@ -22,7 +22,7 @@ import {
   type StoryReviewResult,
 } from "@/lib/claude/editor";
 import type { Idea, IdeaDirection, PolishChange, RejectedChange, StoryReviewKind, StructureChange } from "@/lib/claude/editing";
-import { PUBLISHED_DRAFTS_COLLECTION, type PreReviewItem } from "@/lib/masterReview";
+import { PUBLISHED_DRAFTS_COLLECTION, findUnsavableTitle, type PreReviewItem } from "@/lib/masterReview";
 
 /**
  * Next.js는 프로덕션에서 Server Action이 throw한 에러 메시지를 마스킹한다.
@@ -38,10 +38,16 @@ export async function saveMasterReviewAction(input: {
   sessionId: string;
   edits: MasterEdit[];
   confirmedChapters: number[];
+  title?: string;
 }): Promise<{ error?: string }> {
   if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  if (input.title !== undefined) {
+    const reason = findUnsavableTitle(input.title);
+    if (reason) return { error: reason };
+  }
   try {
-    await saveMasterReview(input.sessionId, input.edits, input.confirmedChapters);
+    if (input.title === undefined) await saveMasterReview(input.sessionId, input.edits, input.confirmedChapters);
+    else await saveMasterReview(input.sessionId, input.edits, input.confirmedChapters, input.title);
   } catch (err) {
     return { error: messageOf(err, "저장 실패") };
   }

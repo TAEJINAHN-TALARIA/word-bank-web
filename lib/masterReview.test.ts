@@ -15,6 +15,8 @@ import {
   locateMemos,
   editedParagraphKeys,
   findUnsavableReason,
+  findUnsavableTitle,
+  MAX_TITLE_CHARS,
   applyPublishedEdits,
   isValidDraftEdits,
   findUnsavableDraftReason,
@@ -242,6 +244,23 @@ describe("locateMemos / editedParagraphKeys (문단 위치가 아니라 내용�
 
   it("바뀐 게 없으면 비어 있다", () => {
     expect(editedParagraphKeys(loaded, loaded).size).toBe(0);
+  });
+});
+
+describe("findUnsavableTitle", () => {
+  it("정상이면 null이다(앞뒤 공백은 다듬은 길이로 본다)", () => {
+    expect(findUnsavableTitle("온전한 소리는 홀로 울리지 않는다")).toBeNull();
+    expect(findUnsavableTitle("  제목  ")).toBeNull();
+    expect(findUnsavableTitle("가".repeat(MAX_TITLE_CHARS))).toBeNull();
+  });
+
+  it("공백뿐이면 비어 있다고 알려준다", () => {
+    expect(findUnsavableTitle("")).toBe("소설 제목이 비어 있어요");
+    expect(findUnsavableTitle("   ")).toBe("소설 제목이 비어 있어요");
+  });
+
+  it("한도를 넘으면 한도를 알려준다", () => {
+    expect(findUnsavableTitle("가".repeat(MAX_TITLE_CHARS + 1))).toBe("소설 제목은 120자까지예요");
   });
 });
 
