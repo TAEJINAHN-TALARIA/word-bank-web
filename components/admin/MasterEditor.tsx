@@ -7,8 +7,11 @@ import {
   approveMasterReviewAction,
   editPublishedStoryAction,
   ensurePreReviewAction,
+  evaluateMasterAction,
   saveMasterReviewAction,
 } from "@/lib/actions/masterReviewActions";
+import type { MasterEvaluation } from "@/lib/admin-functions/storyGenerator";
+import { approvalNote, chaptersKey } from "@/lib/qualityCheck";
 import {
   applyPublishedEdits,
   buildPublishedEdits,
@@ -87,6 +90,11 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   const [showMemos, setShowMemos] = useState(true);
   const [showEdits, setShowEdits] = useState(true);
   const [cleanupOpen, setCleanupOpen] = useState(false);
+  // 승인 전 품질 점검: 결과와 점검한 시점의 글 열쇠를 들고 있다가, 글이 바뀌면 낡은 결과로 표시한다.
+  const [evaluation, setEvaluation] = useState<MasterEvaluation | null>(null);
+  const [evaluatedKey, setEvaluatedKey] = useState<string | null>(null);
+  const [evaluating, setEvaluating] = useState(false);
+  const [evalError, setEvalError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"save" | "approve" | null>(null);
   const [savedAt, setSavedAt] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,6 +219,25 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
 
   function updateParagraph(chapterNumber: number, index: number, text: string) {
     updateChapter(chapterNumber, (c) => ({ ...c, paragraphs: c.paragraphs.map((p, i) => (i === index ? text : p)) }));
+  }
+
+  const currentKey = useMemo(() => chaptersKey(chapters), [chapters]);
+  const evaluationStale = evaluation !== null && evaluatedKey !== currentKey;
+
+  // 지금 화면의 글을 그대로 보내 읽기 전용으로 점검한다(저장과 무관). 점검 중 글이 바뀌면 보낸 시점의 열쇠로 낡음을 가린다.
+  async function runEvaluation() {
+    const sent = chapters;
+    const key = chaptersKey(sent);
+    setEvaluating(true);
+    setEvalError(null);
+    const response = await evaluateMasterAction({ sessionId: detail.id, chapters: sent });
+    setEvaluating(false);
+    if (response.error || !response.result) {
+      setEvalError(response.error ?? "품질 점검 결과를 받지 못했어요");
+      return;
+    }
+    setEvaluation(response.result);
+    setEvaluatedKey(key);
   }
 
   // 문단 정리 모달: 고른 장들의 문단을 한 번에 바꾼다(장 제목·확인 상태는 그대로).
@@ -711,6 +738,9 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
           view={view}
           focus={view === "edit" ? { chapterNumber: currentChapter.chapterNumber, paragraphIndex } : null}
           novelTitle={isReview ? novelTitle : undefined}
+          quality={
+            isReview ? { evaluation, stale: evaluationStale, running: evaluating, error: evalError, onRun: () => void runEvaluation() } : undefined
+          }
           chapters={chapters}
           currentText={currentText}
           level={detail.level}
@@ -737,6 +767,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
               ? "모든 챕터를 확인 완료로 표시하면 승인할 수 있어요. 승인하면 편집본이 마스터로 확정되고 일러스트 → 현지화 → 품질 게이트가 이어서 실행됩니다."
               : "게시본에 반영을 누르기 전까지는 초안으로만 남고 게시된 글은 바뀌지 않아요. 반영하면 바로 공개되고 수정 전 내용은 기록으로 남아요."}
           </p>
+          {isReview && <p className="text-xs leading-relaxed text-muted-foreground">{approvalNote(evaluation, evaluationStale)} (승인은 막지 않아요)</p>}
         </div>
         {isReview ? (
           <Button type="button" size="lg" className="h-10 px-5 text-sm" disabled={!allConfirmed || locked} onClick={handleApprove}>

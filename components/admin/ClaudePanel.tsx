@@ -10,6 +10,8 @@ import { ReferenceCards } from "@/components/admin/ReferenceCards";
 import { EditorChat, type ChatTarget } from "@/components/admin/EditorChat";
 import { useEditorChat } from "@/components/admin/useEditorChat";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { QualityCheckPanel } from "@/components/admin/QualityCheckPanel";
+import type { MasterEvaluation } from "@/lib/admin-functions/storyGenerator";
 import type { ChatFocus } from "@/lib/chatProtocol";
 
 const READ_CHIPS: { label: string; kind: StoryReviewKind }[] = [
@@ -40,6 +42,7 @@ export function ClaudePanel({
   disabled,
   focus,
   novelTitle,
+  quality,
   onJump,
 }: {
   mode: "review" | "published";
@@ -59,6 +62,8 @@ export function ClaudePanel({
   focus: ChatFocus;
   // 편집 중인 소설 제목(검토 모드). 대화에 함께 보내 Claude가 고치는 중의 제목을 보게 한다.
   novelTitle?: string;
+  // 승인 전 품질 점검(검토 모드만). 결과와 진행 상태는 부모가 들고 있어 탭을 오가도 유지된다.
+  quality?: { evaluation: MasterEvaluation | null; stale: boolean; running: boolean; error: string | null; onRun: () => void };
   onJump: (chapterNumber: number, paragraphIndex: number) => void;
 }) {
   const [response, setResponse] = useState<ReviewResponse | null>(null);
@@ -104,6 +109,7 @@ export function ClaudePanel({
         <TabsList className="w-full">
           <TabsTrigger value="notes">메모·참고</TabsTrigger>
           <TabsTrigger value="chat">대화</TabsTrigger>
+          {quality && <TabsTrigger value="quality">품질 점검</TabsTrigger>}
         </TabsList>
         <TabsContent value="notes" className="flex flex-col gap-3">
           {mode === "review" && (
@@ -217,6 +223,20 @@ export function ClaudePanel({
             onStop={chat.stop}
           />
         </TabsContent>
+        {quality && (
+          <TabsContent value="quality">
+            <QualityCheckPanel
+              evaluation={quality.evaluation}
+              stale={quality.stale}
+              running={quality.running}
+              error={quality.error}
+              disabled={disabled}
+              chapters={chapters}
+              onRun={quality.onRun}
+              onJump={onJump}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </aside>
   );
