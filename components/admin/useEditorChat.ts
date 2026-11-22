@@ -9,6 +9,7 @@ import {
   trimHistory,
   withFocus,
   type ChatFocus,
+  type ChatLimit,
   type ChatMessage,
 } from "@/lib/chatProtocol";
 import type { MasterChapter } from "@/lib/masterReview";
@@ -45,7 +46,8 @@ export function useEditorChat({ mode, id }: { mode: "review" | "published"; id: 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const send = useCallback(
-    async (text: string, context: { chapters: MasterChapter[]; focus: ChatFocus; title?: string }) => {
+    // limitTo가 있으면 서버가 그 문단과 앞뒤만 Claude에게 보여 준다(없으면 원고 전체).
+    async (text: string, context: { chapters: MasterChapter[]; focus: ChatFocus; title?: string; limitTo?: ChatLimit }) => {
       const trimmed = text.trim();
       if (!trimmed || abortRef.current) return;
 
@@ -75,6 +77,7 @@ export function useEditorChat({ mode, id }: { mode: "review" | "published"; id: 
             chapters: context.chapters,
             messages: trimHistory(history),
             ...(context.title !== undefined && { title: context.title }),
+            ...(context.limitTo && { limitTo: context.limitTo }),
           }),
           signal: controller.signal,
         });

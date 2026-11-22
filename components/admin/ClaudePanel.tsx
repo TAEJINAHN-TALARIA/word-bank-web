@@ -12,7 +12,7 @@ import { useEditorChat } from "@/components/admin/useEditorChat";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { QualityCheckPanel } from "@/components/admin/QualityCheckPanel";
 import type { MasterEvaluation } from "@/lib/admin-functions/storyGenerator";
-import type { ChatFocus } from "@/lib/chatProtocol";
+import { chatLimit, type ChatFocus, type ChatScope } from "@/lib/chatProtocol";
 
 const READ_CHIPS: { label: string; kind: StoryReviewKind }[] = [
   { label: "전체 흐름 점검", kind: "flow" },
@@ -73,6 +73,8 @@ export function ClaudePanel({
   const chat = useEditorChat({ mode, id });
   const [chatDraft, setChatDraft] = useState("");
   const [chatTarget, setChatTarget] = useState<ChatTarget>("paragraph");
+  // Claude가 읽는 범위. 기본은 이 문단과 앞뒤만(입력이 작고 빠르다). 전체가 필요한 질문일 때 편집자가 전체 원고로 바꾼다.
+  const [chatScope, setChatScope] = useState<ChatScope>("paragraph");
   // 문단을 보고 있을 때만 제목 대상을 고를 수 있다(전체 읽기 화면은 지금처럼 전체 원고).
   const canTarget = mode === "review" && focus !== null && "paragraphIndex" in focus;
   const chatFocus: ChatFocus =
@@ -81,6 +83,9 @@ export function ClaudePanel({
       : canTarget && chatTarget === "chapterTitle"
         ? { chapterNumber: (focus as { chapterNumber: number }).chapterNumber, chapterTitle: true }
         : focus;
+  // 문단 중심 범위는 문단을 보고 있을 때만 적용된다(제목 대상·전체 읽기 화면은 전체 원고).
+  const showScope = chatFocus !== null && "paragraphIndex" in chatFocus;
+  const limitTo = chatLimit(chatFocus, chatScope);
 
   async function runReview(label: string, kind: StoryReviewKind, instruction?: string) {
     setPendingLabel(label);
@@ -217,9 +222,14 @@ export function ClaudePanel({
             target={chatTarget}
             onTargetChange={setChatTarget}
             showTargets={canTarget}
+            scope={chatScope}
+            onScopeChange={setChatScope}
+            showScope={showScope}
             draft={chatDraft}
             onDraftChange={setChatDraft}
-            onSend={(text) => void chat.send(text, { chapters, focus: chatFocus, ...(novelTitle?.trim() && { title: novelTitle }) })}
+            onSend={(text) =>
+              void chat.send(text, { chapters, focus: chatFocus, ...(novelTitle?.trim() && { title: novelTitle }), ...(limitTo && { limitTo }) })
+            }
             onStop={chat.stop}
             onClear={chat.clear}
           />
