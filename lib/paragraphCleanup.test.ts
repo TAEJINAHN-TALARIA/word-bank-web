@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildCleanupBase, summarizeChapter } from "./paragraphCleanup";
+import { buildCleanupBase, fetchChapterSuggestion, summarizeChapter } from "./paragraphCleanup";
 import type { MasterChapter } from "./masterReview";
 import type { StructureChange } from "./claude/editing";
 
@@ -38,6 +38,32 @@ describe("buildCleanupBase", () => {
     const base = buildCleanupBase([chapter(1, ["정상입니다."]), chapter(2, ["그가 말했다. “열린 따옴표"])], "separate");
     expect(base.skipped).toEqual({ 2: [1] });
     expect(base.chapters[1].paragraphs).toEqual(["그가 말했다. “열린 따옴표"]);
+  });
+});
+
+describe("fetchChapterSuggestion", () => {
+  const change: StructureChange = { kind: "merge", paragraphIndex: 0, splitBefore: "", reason: "한 호흡입니다" };
+
+  it("제안을 받으면 changes를 돌려준다", async () => {
+    expect(await fetchChapterSuggestion(async () => ({ changes: [change] }))).toEqual({ changes: [change] });
+    expect(await fetchChapterSuggestion(async () => ({ changes: [] }))).toEqual({ changes: [] });
+  });
+
+  it("서버가 error를 돌려주면 그 장의 오류로 남긴다", async () => {
+    expect(await fetchChapterSuggestion(async () => ({ error: "지시가 너무 깁니다" }))).toEqual({ error: "지시가 너무 깁니다" });
+  });
+
+  it("error도 changes도 없으면 기본 오류 문구를 쓴다", async () => {
+    expect(await fetchChapterSuggestion(async () => ({}))).toEqual({ error: "문단 구성 제안을 받지 못했습니다" });
+  });
+
+  it("호출이 예외를 던져도(네트워크 끊김·배포 중 등) 던지지 않고 그 장의 오류로 남긴다", async () => {
+    expect(
+      await fetchChapterSuggestion(async () => {
+        throw new Error("Failed to fetch");
+      }),
+    ).toEqual({ error: "Failed to fetch" });
+    expect(await fetchChapterSuggestion(() => Promise.reject("문자열 예외"))).toEqual({ error: "문단 구성 제안을 받지 못했습니다" });
   });
 });
 

@@ -4,13 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { suggestStructureAction } from "@/lib/actions/masterReviewActions";
 import type { StructureChange } from "@/lib/claude/editing";
 import type { DialogueSplitMode } from "@/lib/dialogueSplit";
-import { buildCleanupBase, summarizeChapter, type CleanupBase } from "@/lib/paragraphCleanup";
+import { buildCleanupBase, fetchChapterSuggestion, summarizeChapter, type ChapterSuggestion, type CleanupBase } from "@/lib/paragraphCleanup";
 import type { MasterChapter } from "@/lib/masterReview";
 import { Button } from "@/components/ui/button";
 
 type Phase = "setup" | "running" | "result";
 type Decision = "accept" | "reject";
-type Suggestion = { changes?: StructureChange[]; error?: string };
 
 const touch = "h-11 px-4 text-sm";
 
@@ -53,7 +52,7 @@ export function ParagraphCleanupModal({
   const [useClaude, setUseClaude] = useState(true);
   const [instruction, setInstruction] = useState("");
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [run, setRun] = useState<{ base: CleanupBase; original: MasterChapter[]; suggestions: Record<number, Suggestion> } | null>(null);
+  const [run, setRun] = useState<{ base: CleanupBase; original: MasterChapter[]; suggestions: Record<number, ChapterSuggestion> } | null>(null);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const [overrides, setOverrides] = useState<Record<number, boolean>>({});
 
@@ -82,16 +81,10 @@ export function ParagraphCleanupModal({
       if (runToken.current !== token) return;
       setProgress({ done: i, total });
       const chapter = base.chapters[i];
-      const response = await suggestStructureAction({
-        mode,
-        id,
-        chapters: base.chapters,
-        chapterNumber: chapter.chapterNumber,
-        instruction,
-      });
+      const suggestion = await fetchChapterSuggestion(() =>
+        suggestStructureAction({ mode, id, chapters: base.chapters, chapterNumber: chapter.chapterNumber, instruction }),
+      );
       if (runToken.current !== token) return;
-      const suggestion: Suggestion =
-        response.error || !response.changes ? { error: response.error ?? "문단 구성 제안을 받지 못했습니다" } : { changes: response.changes };
       setRun((prev) => (prev ? { ...prev, suggestions: { ...prev.suggestions, [chapter.chapterNumber]: suggestion } } : prev));
     }
     setProgress(null);

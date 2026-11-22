@@ -27,6 +27,26 @@ export function buildCleanupBase(chapters: MasterChapter[], dialogue: DialogueSp
   return { chapters: next, skipped };
 }
 
+export type ChapterSuggestion = { changes?: StructureChange[]; error?: string };
+
+const SUGGESTION_FAILED = "문단 구성 제안을 받지 못했습니다";
+
+/**
+ * 한 장의 Claude 구성 제안을 받아 그 장의 결과로 정리한다. 서버 액션은 실패를 { error }로 돌려주지만, 호출 자체가
+ * 던질 수 있다(네트워크 끊김, 긴 실행 중 재배포 등). 던져도 한 장의 오류로 남겨야 장 순차 반복이 멈추지 않는다.
+ */
+export async function fetchChapterSuggestion(
+  request: () => Promise<{ error?: string; changes?: StructureChange[] }>,
+): Promise<ChapterSuggestion> {
+  try {
+    const response = await request();
+    if (response.error || !response.changes) return { error: response.error ?? SUGGESTION_FAILED };
+    return { changes: response.changes };
+  } catch (err) {
+    return { error: err instanceof Error && err.message ? err.message : SUGGESTION_FAILED };
+  }
+}
+
 export type ChapterOutcome = {
   chapterNumber: number;
   /** 원래(열었을 때) 문단 수 */
