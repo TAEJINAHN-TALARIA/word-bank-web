@@ -44,8 +44,7 @@ import { useAutosave } from "@/components/admin/useAutosave";
 import { formatClock, type AutosaveResult } from "@/lib/autosaver";
 import { downloadTextFile, printHtml } from "@/components/admin/manuscriptDownload";
 import { buildManuscriptText, buildPrintHtml, manuscriptFileName } from "@/lib/manuscriptExport";
-import { StructureSuggestions } from "@/components/admin/StructureSuggestions";
-import { DialogueSplit } from "@/components/admin/DialogueSplit";
+import { ParagraphCleanupModal } from "@/components/admin/ParagraphCleanupModal";
 import { cn } from "@/lib/utils";
 
 type Selected = { chapterNumber: number; paragraphIndex: number };
@@ -87,6 +86,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   const [openedChapters] = useState<MasterChapter[]>(detail.chapters);
   const [showMemos, setShowMemos] = useState(true);
   const [showEdits, setShowEdits] = useState(true);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
   const [busy, setBusy] = useState<"save" | "approve" | null>(null);
   const [savedAt, setSavedAt] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -213,11 +213,13 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
     updateChapter(chapterNumber, (c) => ({ ...c, paragraphs: c.paragraphs.map((p, i) => (i === index ? text : p)) }));
   }
 
-  // 문단 구성 제안·대사 나누기가 같은 방식으로 현재 장의 문단을 통째로 바꾼다.
-  function applyParagraphs(paragraphs: string[]) {
-    if (!currentChapter) return;
-    updateChapter(currentChapter.chapterNumber, (c) => ({ ...c, paragraphs }));
-    setSelected({ chapterNumber: currentChapter.chapterNumber, paragraphIndex: 0 });
+  // 문단 정리 모달: 고른 장들의 문단을 한 번에 바꾼다(장 제목·확인 상태는 그대로).
+  function applyCleanup(next: Map<number, string[]>) {
+    if (next.size === 0) return;
+    setSavedAt(false);
+    setChapters((prev) => prev.map((c) => (next.has(c.chapterNumber) ? { ...c, paragraphs: next.get(c.chapterNumber) as string[] } : c)));
+    const first = chapters.find((c) => next.has(c.chapterNumber));
+    if (first) setSelected({ chapterNumber: first.chapterNumber, paragraphIndex: 0 });
   }
 
   function insertAt(chapterNumber: number, at: number) {
@@ -495,7 +497,10 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
       )}
 
       <div className="grid gap-5 lg:grid-cols-[15rem_minmax(0,1fr)_21rem] lg:items-start">
-        <nav aria-label="챕터 목록" className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-card p-3">
+        <nav
+          aria-label="챕터 목록"
+          className="flex min-w-0 flex-col gap-1 rounded-xl border border-border bg-card p-3 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto"
+        >
           <h2 className="px-2 pt-1 pb-2 text-sm font-semibold">
             {isReview ? `챕터 ${confirmed.length}/${chapters.length} 확인` : `챕터 ${chapters.length}개`}
           </h2>
@@ -570,6 +575,21 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                   수정한 곳 표시
                 </Button>
               </>
+            )}
+            {isReview && (
+              <Button type="button" size="lg" variant="outline" disabled={locked} onClick={() => setCleanupOpen(true)}>
+                문단 정리
+              </Button>
+            )}
+            {isReview && cleanupOpen && (
+              <ParagraphCleanupModal
+                mode={detail.mode}
+                id={detail.id}
+                chapters={chapters}
+                disabled={locked}
+                onClose={() => setCleanupOpen(false)}
+                onApply={applyCleanup}
+              />
             )}
             <SaveStatusChip status={autosave.status} onRetry={() => void flushAutosave()} />
             <DownloadButton onSelect={handleDownload} />
@@ -661,27 +681,6 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                 )}
               </div>
 
-              {isReview && (
-                <StructureSuggestions
-                  key={currentChapter.chapterNumber}
-                  mode={detail.mode}
-                  id={detail.id}
-                  chapters={chapters}
-                  chapterNumber={currentChapter.chapterNumber}
-                  disabled={locked}
-                  onApply={applyParagraphs}
-                />
-              )}
-
-              {isReview && (
-                <DialogueSplit
-                  key={`dialogue-${currentChapter.chapterNumber}`}
-                  paragraphs={currentChapter.paragraphs}
-                  disabled={locked}
-                  onApply={applyParagraphs}
-                />
-              )}
-
               <ParagraphWorkspace
                 key={`${currentChapter.chapterNumber}-${paragraphIndex}`}
                 mode={detail.mode}
@@ -704,6 +703,8 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
           )}
         </main>
 
+        {/* 스크롤해도 대화창이 화면에 남도록 고정하고, 길면 안에서 스크롤한다 */}
+        <div className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto">
         <ClaudePanel
           mode={detail.mode}
           id={detail.id}
@@ -722,6 +723,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
           disabled={locked}
           onJump={jump}
         />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-5 py-4">
