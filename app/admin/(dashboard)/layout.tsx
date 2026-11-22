@@ -18,7 +18,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="min-h-screen bg-background lg:flex">
       <AdminNav counts={counts} signOut={<SignOutButton />} />
-      <main className="min-w-0 flex-1 overflow-x-auto p-4 sm:p-6 lg:p-8">{children}</main>
+      {/* lg에서는 가로 스크롤을 풀어야 안쪽의 lg:sticky 패널(마스터 편집 화면)이 창 스크롤을 따라 고정된다. 표는 자체 가로 스크롤 래퍼가 있다 */}
+      <main className="min-w-0 flex-1 overflow-x-auto p-4 sm:p-6 lg:overflow-x-visible lg:p-8">{children}</main>
     </div>
   );
 }
