@@ -98,6 +98,24 @@ describe("POST /admin/editor-chat", () => {
     expect(input).toMatchObject({ ...context, mode: "review", messages: validBody.messages });
   });
 
+  it("limitTo가 있으면 streamChat에 넘기고, 올바르지 않으면 400이다", async () => {
+    vi.mocked(streamChat).mockReturnValue(events({ t: "done" }));
+    const limitTo = { chapterNumber: 1, paragraphIndex: 0 };
+    await (await post({ ...validBody, limitTo })).text();
+    expect(vi.mocked(streamChat).mock.calls[0][0]).toMatchObject({ limitTo });
+
+    vi.mocked(streamChat).mockClear();
+    const bad = await post({ ...validBody, limitTo: { chapterNumber: 0, paragraphIndex: 0 } });
+    expect(bad.status).toBe(400);
+    expect(streamChat).not.toHaveBeenCalled();
+  });
+
+  it("limitTo가 없으면 streamChat 입력에도 limitTo가 없다", async () => {
+    vi.mocked(streamChat).mockReturnValue(events({ t: "done" }));
+    await (await post(validBody)).text();
+    expect("limitTo" in vi.mocked(streamChat).mock.calls[0][0]).toBe(false);
+  });
+
   it("응답을 끊으면(취소) Claude 호출에 넘긴 signal이 abort된다", async () => {
     vi.mocked(streamChat).mockReturnValue(
       (async function* () {

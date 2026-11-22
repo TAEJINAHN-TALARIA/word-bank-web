@@ -2,17 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-import { CLAUDE_REVIEW_MODEL, streamConversation, type ConversationClient } from "./structured";
+import { CLAUDE_REVIEW_MODEL, streamConversation, type ChatUsage, type ConversationClient } from "./structured";
 import type { ChatEvent, ChatMessage } from "@/lib/chatProtocol";
 
 const messages: ChatMessage[] = [{ role: "user", content: "[지금 보는 곳: 1장 1문단]\n이 문단 어때?" }];
 const delta = (text: string) => ({ type: "content_block_delta", delta: { type: "text_delta", text } });
 const fallbackStart = { type: "content_block_start", content_block: { type: "fallback" } };
 
-type Script = { events: unknown[]; stopReason?: string | null; throwAt?: number; error?: Error };
+type Script = { events: unknown[]; stopReason?: string | null; throwAt?: number; error?: Error; usage?: ChatUsage };
 
 // SDK 스트림을 흉내 낸다: 이벤트를 차례로 내보내다가 throwAt번째에서 error를 던질 수 있다.
-function fakeClient({ events, stopReason = "end_turn", throwAt, error }: Script) {
+function fakeClient({ events, stopReason = "end_turn", throwAt, error, usage }: Script) {
   const calls: { body: any; options: any }[] = []; // eslint-disable-line @typescript-eslint/no-explicit-any
   const client: ConversationClient = {
     beta: {
@@ -27,7 +27,7 @@ function fakeClient({ events, stopReason = "end_turn", throwAt, error }: Script)
               }
               if (throwAt === events.length) throw error;
             },
-            finalMessage: async () => ({ stop_reason: stopReason }),
+            finalMessage: async () => ({ stop_reason: stopReason, ...(usage && { usage }) }),
           };
         },
       },
@@ -58,6 +58,22 @@ describe("streamConversation", () => {
     expect(body.system).toBe("시스템");
     expect(body.messages[0].content[0]).toEqual({ type: "text", text: "[소설 본문]\n…", cache_control: { type: "ephemeral" } });
     expect(options).toEqual({ signal });
+  });
+
+  it("응답이 끝나면 사용량(usage)을 onUsage로 한 번 넘기고, 이벤트는 그대로다", async () => {
+    const usage: ChatUsage = { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 7 };
+    const { client } = fakeClient({ events: [delta("가")], usage });
+    const onUsage = vi.fn();
+    expect(await collect(streamConversation({ ...base, onUsage }, client))).toEqual([{ t: "delta", text: "가" }, { t: "done" }]);
+    expect(onUsage).toHaveBeenCalledTimes(1);
+    expect(onUsage).toHaveBeenCalledWith(usage);
+  });
+
+  it("usage가 없으면 onUsage를 부르지 않는다", async () => {
+    const { client } = fakeClient({ events: [delta("가")] });
+    const onUsage = vi.fn();
+    await collect(streamConversation({ ...base, onUsage }, client));
+    expect(onUsage).not.toHaveBeenCalled();
   });
 
   it("글 조각은 delta로, 끝나면 done으로 내보낸다", async () => {

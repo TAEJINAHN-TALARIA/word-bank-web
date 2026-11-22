@@ -57,6 +57,25 @@ describe("parseChatRequest", () => {
     ["공백뿐인 content", { ...valid, messages: [{ role: "user", content: "  \n " }] }],
   ])("거절한다: %s", (_name, body) => expectRejected(body));
 
+  it("limitTo는 올바르면 새 객체로 담아 돌려주고, 없으면 값에도 없다", () => {
+    const limitTo = { chapterNumber: 1, paragraphIndex: 0 };
+    expect(parseChatRequest({ ...valid, limitTo })).toEqual({ ok: true, value: { ...valid, limitTo } });
+    const without = parseChatRequest(valid);
+    expect(without.ok && "limitTo" in without.value).toBe(false);
+  });
+
+  it.each([
+    ["장 번호 0", { chapterNumber: 0, paragraphIndex: 0 }],
+    ["문단 인덱스가 음수", { chapterNumber: 1, paragraphIndex: -1 }],
+    ["장 번호가 소수", { chapterNumber: 1.5, paragraphIndex: 0 }],
+    ["문단 인덱스가 문자열", { chapterNumber: 1, paragraphIndex: "0" }],
+    ["빈 객체", {}],
+    ["null", null],
+    ["문자열", "1장"],
+  ])("limitTo가 올바르지 않으면 거절한다: %s", (_name, limitTo) => {
+    expectRejected({ ...valid, limitTo });
+  });
+
   it(`메시지가 ${CHAT_LIMITS.maxMessages}개를 넘으면 거절한다`, () => {
     const many: ChatMessage[] = Array.from({ length: CHAT_LIMITS.maxMessages + 1 }, (_, i) => ({
       role: i % 2 === 0 ? "user" : "assistant",
@@ -115,5 +134,35 @@ describe("streamChat", () => {
     expect(call.effort).toBe("medium");
     expect(call.messages).toBe(messages);
     expect(call.signal).toBe(signal);
+  });
+
+  async function run(limitTo?: { chapterNumber: number; paragraphIndex: number }) {
+    vi.mocked(structured.streamConversation).mockReturnValueOnce(
+      (async function* () {
+        yield { t: "done" } as ChatEvent;
+      })(),
+    );
+    const multi = [{ chapterNumber: 1, chapterTitle: "첫째", paragraphs: ["하나.", "둘.", "셋."] }];
+    for await (const _ of streamChat({ ...base, chapters: multi, mode: "review", messages, ...(limitTo && { limitTo }) })) void _;
+    return vi.mocked(structured.streamConversation).mock.calls.at(-1)![0];
+  }
+
+  it("limitTo가 있으면 문단 중심 본문을, 없으면 전체 본문을 쓴다", async () => {
+    const limited = await run({ chapterNumber: 1, paragraphIndex: 0 });
+    expect(limited.context).toContain("(범위:");
+    expect(limited.context).not.toContain("셋.");
+    const full = await run();
+    expect(full.context).not.toContain("(범위:");
+    expect(full.context).toContain("셋.");
+  });
+
+  it("사용량은 범위와 함께 토큰 수만 로그로 남긴다", async () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    const usage = { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 7 };
+    (await run({ chapterNumber: 1, paragraphIndex: 0 })).onUsage?.(usage);
+    expect(info).toHaveBeenLastCalledWith("[editor-chat] usage", { scope: "paragraph", ...usage });
+    (await run()).onUsage?.(usage);
+    expect(info).toHaveBeenLastCalledWith("[editor-chat] usage", { scope: "full", ...usage });
+    info.mockRestore();
   });
 });

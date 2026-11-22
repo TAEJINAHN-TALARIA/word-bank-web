@@ -66,6 +66,14 @@ export async function callStructured<T extends z.ZodType>(input: {
   return response.parsed_output as z.output<T>;
 }
 
+// 응답 한 번의 토큰 사용량(캐시 쓰기·읽기 포함). 효과 확인용 로그에만 쓴다.
+export type ChatUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  cache_creation_input_tokens?: number | null;
+  cache_read_input_tokens?: number | null;
+};
+
 // SDK 스트림 중 이 파일이 쓰는 부분만 적은 모양 — 테스트에서 가짜 클라이언트를 넣을 수 있게 한다.
 export type ConversationClient = {
   beta: {
@@ -73,7 +81,7 @@ export type ConversationClient = {
       stream(
         body: unknown,
         options?: { signal?: AbortSignal },
-      ): AsyncIterable<unknown> & { finalMessage(): Promise<{ stop_reason: string | null }> };
+      ): AsyncIterable<unknown> & { finalMessage(): Promise<{ stop_reason: string | null; usage?: ChatUsage }> };
     };
   };
 };
@@ -92,6 +100,8 @@ export async function* streamConversation(
     messages: ChatMessage[];
     effort: "low" | "medium" | "high";
     signal?: AbortSignal;
+    // 응답이 끝났을 때 토큰 사용량을 받는다(캐시가 실제로 맞는지 확인하는 로그용).
+    onUsage?: (usage: ChatUsage) => void;
   },
   client?: ConversationClient,
 ): AsyncGenerator<ChatEvent> {
@@ -119,7 +129,8 @@ export async function* streamConversation(
       }
     }
 
-    const { stop_reason } = await stream.finalMessage();
+    const { stop_reason, usage } = await stream.finalMessage();
+    if (usage) input.onUsage?.(usage);
     if (stop_reason === "refusal") {
       yield { t: "error", message: "Claude가 이 요청을 처리하지 못했습니다 (정책상 거절)" };
     } else if (stop_reason === "max_tokens") {
