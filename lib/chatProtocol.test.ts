@@ -3,6 +3,7 @@ import {
   CHAT_LIMITS,
   EDITED_NOTICE,
   applyChatEvent,
+  chatLimit,
   createEventParser,
   encodeEvent,
   focusLine,
@@ -99,6 +100,28 @@ describe("원고 수정 알림 (EDITED_NOTICE)", () => {
       expect(manuscriptKey(chapters(["가"]), " 제목 ")).toBe(manuscriptKey(chapters(["가"]), "제목"));
       expect(manuscriptKey(chapters(["가"]), undefined)).toBe(manuscriptKey(chapters(["가"]), ""));
     });
+  });
+});
+
+describe("chatLimit", () => {
+  const paragraphFocus = { chapterNumber: 3, paragraphIndex: 1 };
+
+  it("문단을 보고 있고 범위가 문단 중심이면 그 문단 위치를 돌려준다(포커스와 다른 새 객체, 두 키만)", () => {
+    const limit = chatLimit(paragraphFocus, "paragraph");
+    expect(limit).toEqual({ chapterNumber: 3, paragraphIndex: 1 });
+    expect(limit).not.toBe(paragraphFocus);
+  });
+
+  it("범위가 전체 원고면 문단을 보고 있어도 제한이 없다", () => {
+    expect(chatLimit(paragraphFocus, "full")).toBeUndefined();
+  });
+
+  it.each([
+    ["전체 읽기 화면", null],
+    ["소설 제목", { novelTitle: true as const }],
+    ["장 제목", { chapterNumber: 3, chapterTitle: true as const }],
+  ])("%s는 범위가 문단 중심이어도 제한이 없다(이야기 전체가 필요)", (_name, focus) => {
+    expect(chatLimit(focus, "paragraph")).toBeUndefined();
   });
 });
 

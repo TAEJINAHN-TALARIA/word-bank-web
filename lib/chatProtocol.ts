@@ -14,6 +14,11 @@ export type ChatFocus =
   | { chapterNumber: number; chapterTitle: true }
   | null;
 
+// 대화가 읽는 원고의 범위: 지금 보는 문단과 앞뒤만("paragraph") 또는 원고 전체("full").
+export type ChatScope = "paragraph" | "full";
+// 문단 중심으로 읽을 때 중심이 되는 문단 위치(paragraphIndex는 0부터).
+export type ChatLimit = { chapterNumber: number; paragraphIndex: number };
+
 export type ChatEvent =
   | { t: "delta"; text: string }
   | { t: "reset" }
@@ -34,6 +39,12 @@ export function focusLine(focus: ChatFocus): string {
   if ("novelTitle" in focus) return "[지금 보는 곳: 소설 제목]";
   if ("chapterTitle" in focus) return `[지금 보는 곳: ${focus.chapterNumber}장 제목]`;
   return `[지금 보는 곳: ${focus.chapterNumber}장 ${focus.paragraphIndex + 1}문단]`;
+}
+
+// 문단 중심 범위는 문단을 보고 있을 때만 적용한다 — 제목 대상과 전체 읽기 화면은 이야기 전체가 필요하므로 항상 전체 원고다.
+export function chatLimit(focus: ChatFocus, scope: ChatScope): ChatLimit | undefined {
+  if (scope !== "paragraph" || !focus || !("paragraphIndex" in focus)) return undefined;
+  return { chapterNumber: focus.chapterNumber, paragraphIndex: focus.paragraphIndex };
 }
 
 // 지난 전송 뒤에 원고가 바뀌었음을 Claude에게 알리는 줄. 시스템 프롬프트(buildChatSystemPrompt)가 이 줄의 뜻을 설명한다.
