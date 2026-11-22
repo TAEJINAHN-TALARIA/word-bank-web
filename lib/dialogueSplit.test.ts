@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { splitDialogue, type DialogueSplitMode } from "./dialogueSplit";
+import { splitDialogue, quotedRanges, type DialogueSplitMode } from "./dialogueSplit";
 
 const attach = (p: string[]) => splitDialogue(p, "attach");
 
@@ -168,5 +168,24 @@ describe("splitDialogue — 대사만 따로", () => {
   it("짝이 맞지 않는 문단은 건너뛴다", () => {
     const input = ["그가 말했다. “열린 따옴표"];
     expect(separate(input)).toEqual({ paragraphs: input, skipped: [1] });
+  });
+});
+
+describe("quotedRanges", () => {
+  it("여는 따옴표부터 닫는 따옴표 다음까지의 구간을 돌려준다", () => {
+    expect(quotedRanges("그가 “가자.” 했다.")).toEqual([[3, 8]]);
+  });
+
+  it("따옴표가 없으면 빈 목록이다", () => {
+    expect(quotedRanges("그가 문을 열었다.")).toEqual([]);
+  });
+
+  it("곧은 따옴표 두 개는 한 구간이다", () => {
+    expect(quotedRanges('그가 "가자." 했다.')).toEqual([[3, 8]]);
+  });
+
+  it("짝이 어긋나면 null이다", () => {
+    expect(quotedRanges('"그가 “열린')).toBeNull();
+    expect(quotedRanges("그가 “열린 따옴표")).toBeNull();
   });
 });

@@ -17,6 +17,12 @@ export const structureSchema = z.object({
   ),
 });
 
+export const chapterPolishSchema = z.object({
+  changes: z.array(
+    z.object({ paragraphNumber: z.number().int(), before: z.string(), after: z.string(), reason: z.string() }),
+  ),
+});
+
 export const storyReviewSchema = z.object({
   title: z.string(),
   items: z.array(

@@ -1,0 +1,146 @@
+import { describe, it, expect } from "vitest";
+import {
+  MAX_CHAPTER_POLISH_CHANGES,
+  CHAPTER_POLISH_SYSTEM_PROMPT,
+  buildChapterPolishTask,
+  validateChapterPolish,
+  applyChapterPolish,
+  type RawChapterPolishChange,
+} from "./preprocessing";
+import { DATA_NOTICE } from "./editing";
+
+const P = ["그녀는 아주아주 매우 조용하고 차분하게 문을 천천히 열었다.", "수진은 14살이었다. 그는 “가자.” 하고 말했다."];
+
+const good: RawChapterPolishChange = {
+  paragraphNumber: 1,
+  before: "아주아주 매우 조용하고 차분하게 ",
+  after: "",
+  reason: "수식어가 겹쳐요",
+};
+
+describe("③ 문장 다듬기", () => {
+  it("시스템 프롬프트에 핵심 규칙이 들어 있다", () => {
+    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain(DATA_NOTICE);
+    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain("대사(따옴표 안)는 건드리지");
+    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain(`최대 ${MAX_CHAPTER_POLISH_CHANGES}건`);
+    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain("최대 20건");
+    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain("수·나이·날짜");
+  });
+
+  it("요청문에 장 번호와 지시가 들어간다", () => {
+    const task = buildChapterPolishTask({ chapterNumber: 3, instruction: "더 짧게" });
+    expect(task).toContain("3장 전체 문단");
+    expect(task).toContain("더 짧게");
+    expect(buildChapterPolishTask({ chapterNumber: 3 })).not.toContain("지시:");
+  });
+
+  describe("validateChapterPolish", () => {
+    it("좋은 항목은 문단 인덱스로 바뀌어 남고 received는 입력 길이다", () => {
+      expect(validateChapterPolish([good], P)).toEqual({
+        changes: [{ paragraphIndex: 0, before: good.before, after: "", reason: good.reason }],
+        received: 1,
+      });
+    });
+
+    it("문단이 빈 배열이면 변경 없이 received만 센다", () => {
+      expect(validateChapterPolish([good, good], [])).toEqual({ changes: [], received: 2 });
+    });
+
+    it("대사 안쪽 구절은 버리고 같은 문단의 대사 밖 구절은 남긴다", () => {
+      const paragraphs = ["그는 “가자, 정말 매우 빨리 가자.” 하고 말했다."];
+      const inside = { paragraphNumber: 1, before: "정말 매우 빨리 ", after: "", reason: "r" };
+      const outside = { paragraphNumber: 1, before: "하고 ", after: "", reason: "r" };
+      const { changes } = validateChapterPolish([inside, outside], paragraphs);
+      expect(changes.map((c) => c.before)).toEqual(["하고 "]);
+    });
+
+    it("따옴표 짝이 어긋난 문단은 어떤 항목도 남기지 않는다", () => {
+      const paragraphs = ["그가 “열린 따옴표 안의 아주 긴 말"];
+      const items = [
+        { paragraphNumber: 1, before: "열린 따옴표 안의 ", after: "", reason: "r" },
+        { paragraphNumber: 1, before: "그가 ", after: "", reason: "r" },
+      ];
+      expect(validateChapterPolish(items, paragraphs)).toEqual({ changes: [], received: 2 });
+    });
+
+    const bad: [string, RawChapterPolishChange][] = [
+      ["문단 번호 0", { ...good, paragraphNumber: 0 }],
+      ["없는 문단 번호", { ...good, paragraphNumber: 3 }],
+      ["문단에 없는 before", { ...good, before: "존재하지 않는 구절" }],
+      ["문단에 두 번 나오는 before", { ...good, paragraphNumber: 3, before: "가" }],
+      ["before와 after가 같음", { ...good, after: good.before }],
+      ["after에 빈 줄", { ...good, after: "가\n\n나" }],
+      ["before가 14살 → after 16살", { paragraphNumber: 2, before: "14살", after: "16살", reason: "r" }],
+      ["after가 before의 120% 초과", { ...good, before: "문을 ", after: "문을 아주 천천히 " }],
+      ...["“", "”", '"', "'", "‘", "’", "「", "」"].map((q): [string, RawChapterPolishChange] => [
+        `after에 ${q}`,
+        { ...good, after: `${q}` },
+      ]),
+    ];
+
+    it.each(bad)("버린다: %s", (_name, item) => {
+      // 세 번째 문단은 "가"가 두 번 나오는 경우를 위한 것이다.
+      const paragraphs = [...P, "가나다가"];
+      // before에 따옴표가 있는 항목은 문단에도 그 글자가 있어야 정확히 한 번 맞는지와 상관없이 가드가 먼저 걸러야 한다.
+      expect(validateChapterPolish([item], paragraphs).changes).toEqual([]);
+    });
+
+    // 문단에는 따옴표가 실제로 있고(따옴표 짝은 맞다) before가 대사 구간에 통째로 들지 않아, 글자 가드만이 이 항목을 막는다.
+    it.each([
+      ["“", "그는 “조용히” 걸었다.", "그는 “"],
+      ["”", "그는 “조용히” 걸었다.", "” 걸었다."],
+      ['"', '그는 "조용히" 걸었다.', '그는 "'],
+      ["'", "그는 '조용히 걸었다.", "그는 '"],
+      ["‘", "그는 ‘조용히’ 걸었다.", "그는 ‘"],
+      ["’", "그는 ‘조용히’ 걸었다.", "’ 걸었다."],
+      ["「", "그는 「조용히」 걸었다.", "그는 「"],
+      ["」", "그는 「조용히」 걸었다.", "」 걸었다."],
+    ])("before에 %s가 있으면 버린다", (_q, paragraph, before) => {
+      expect(validateChapterPolish([{ paragraphNumber: 1, before, after: "", reason: "r" }], [paragraph]).changes).toEqual([]);
+    });
+
+    it("같은 문단 안에서 겹치는 두 번째 항목은 버린다", () => {
+      const second = { ...good, before: "매우 조용하고 ", after: "" };
+      const { changes, received } = validateChapterPolish([good, second], P);
+      expect(changes).toHaveLength(1);
+      expect(changes[0].before).toBe(good.before);
+      expect(received).toBe(2);
+    });
+
+    it("장당 20건에서 자른다 (유효 21건을 세 문단에 나눠 줘서 장 한도가 걸리게 한다)", () => {
+      const words = Array.from({ length: 21 }, (_, i) => `단어${String.fromCharCode(0xac00 + i)}`);
+      const paragraphs = [0, 1, 2].map((p) => words.slice(p * 7, p * 7 + 7).join(" 그리고 ") + " 끝.");
+      const raw: RawChapterPolishChange[] = words.map((w, i) => ({
+        paragraphNumber: Math.floor(i / 7) + 1,
+        before: `${w} `,
+        after: "",
+        reason: "r",
+      }));
+      const result = validateChapterPolish(raw, paragraphs);
+      expect(result.received).toBe(21);
+      expect(result.changes).toHaveLength(MAX_CHAPTER_POLISH_CHANGES);
+      expect(result.changes.map((c) => c.before)).toEqual(raw.slice(0, 20).map((r) => r.before));
+    });
+  });
+
+  describe("applyChapterPolish", () => {
+    it("해당 문단만 바꾸고 입력 배열은 건드리지 않는다", () => {
+      const input = [...P];
+      const { changes } = validateChapterPolish([good], P);
+      const out = applyChapterPolish(input, changes);
+      expect(out).toEqual(["그녀는 문을 천천히 열었다.", P[1]]);
+      expect(input).toEqual(P);
+    });
+
+    it("한 문단의 두 항목 중 앞을 고쳐도 뒤 항목이 제자리에 적용된다", () => {
+      const paragraphs = ["그녀는 아주아주 매우 조용하게 문을 천천히 열었다."];
+      const raw = [
+        { paragraphNumber: 1, before: "아주아주 매우 ", after: "", reason: "r" },
+        { paragraphNumber: 1, before: "천천히 ", after: "", reason: "r" },
+      ];
+      const { changes } = validateChapterPolish(raw, paragraphs);
+      expect(changes).toHaveLength(2);
+      expect(applyChapterPolish(paragraphs, changes)).toEqual(["그녀는 조용하게 문을 열었다."]);
+    });
+  });
+});

@@ -32,6 +32,18 @@ function findQuotes(text: string): Quote[] | null {
   return open ? null : quotes;
 }
 
+/**
+ * 따옴표 대사의 구간 목록 — 여는 따옴표부터 닫는 따옴표까지(양 끝 포함, end는 닫는 따옴표 다음 인덱스).
+ * 짝이 어긋난 글이면 안쪽·바깥을 알 수 없으므로 null.
+ */
+export function quotedRanges(text: string): [start: number, end: number][] | null {
+  const quotes = findQuotes(text);
+  if (!quotes) return null;
+  const ranges: [number, number][] = [];
+  for (let i = 0; i < quotes.length; i += 2) ranges.push([quotes[i].index, quotes[i + 1].index + 1]);
+  return ranges;
+}
+
 // 여는 따옴표가 문장 시작 자리일 때만 나눈다. `잡고 “…”라는 안내`나 `“…”, “…”`처럼
 // 문장 안에 든 인용을 쪼개면 문장이 깨지므로, 앞이 문장 끝 부호이거나 닫는 따옴표일 때로 한정한다.
 // "separate"는 여기에 더해 대사가 끝난 뒤에서도 나눈다. 닫는 따옴표에 글자가 붙은(`”라고`) 경우, 쉼표로 끝난
