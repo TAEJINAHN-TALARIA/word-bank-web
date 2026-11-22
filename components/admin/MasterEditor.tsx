@@ -19,8 +19,10 @@ import {
   editedParagraphKeys,
   findUnsavableDraftReason,
   findUnsavableReason,
+  findUnsavableTitle,
   insertParagraph,
   locateMemos,
+  MAX_TITLE_CHARS,
   moveParagraph,
   normalizeParagraphs,
   pairedParagraph,
@@ -69,6 +71,9 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   const [staleDraft, setStaleDraft] = useState<PublishedDraft | null>(!isReview && detail.draft?.stale ? detail.draft : null);
   const [confirmed, setConfirmed] = useState<number[]>(detail.confirmedChapters);
   const [savedConfirmed, setSavedConfirmed] = useState<number[]>(detail.confirmedChapters);
+  // 소설 제목은 검토 모드에서만 고친다(게시본은 표현 수정만). savedTitle은 마지막으로 저장한(다듬은) 제목이다.
+  const [novelTitle, setNovelTitle] = useState(detail.title ?? "");
+  const [savedTitle, setSavedTitle] = useState((detail.title ?? "").trim());
   const [view, setView] = useState<"edit" | "read">("edit");
   const [selected, setSelected] = useState<Selected>(() => {
     const first = detail.preReview?.[0];
@@ -108,7 +113,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
   const editedKeys = useMemo(() => editedParagraphKeys(chapters, detail.original), [chapters, detail.original]);
 
   const dirty = isReview
-    ? buildSaveEdits(chapters, baseline).length > 0 || !sameNumbers(confirmed, savedConfirmed)
+    ? buildSaveEdits(chapters, baseline).length > 0 || !sameNumbers(confirmed, savedConfirmed) || novelTitle.trim() !== savedTitle
     : buildPublishedEdits(chapters, baseline).length > 0;
   // 게시본에 반영할 수 있는 글(게시된 글과 다름). dirty는 "초안으로도 아직 저장 안 됨"이다.
   const canApply = !isReview && canApplyToLive(chapters, liveBaseline, staleDraft !== null);
@@ -143,14 +148,21 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
       return { ok: true };
     }
     const edits = buildSaveEdits(normalized, baseline);
-    if (edits.length === 0 && sameNumbers(confirmed, savedConfirmed)) return { ok: true };
-    // 마스터 저장은 제목·본문이 빈 챕터를 거절한다. 글을 쓰다 잠깐 비는 순간은 오류가 아니라 건너뛴다.
-    const reason = findUnsavableReason(edits);
+    const titleChanged = novelTitle.trim() !== savedTitle;
+    if (edits.length === 0 && sameNumbers(confirmed, savedConfirmed) && !titleChanged) return { ok: true };
+    // 마스터 저장은 제목·본문이 빈 챕터와 빈 소설 제목을 거절한다. 글을 쓰다 잠깐 비는 순간은 오류가 아니라 건너뛴다.
+    const reason = findUnsavableReason(edits) ?? (titleChanged ? findUnsavableTitle(novelTitle) : null);
     if (reason) return { skipped: reason };
-    const result = await saveMasterReviewAction({ sessionId: detail.id, edits, confirmedChapters: confirmed });
+    const result = await saveMasterReviewAction({
+      sessionId: detail.id,
+      edits,
+      confirmedChapters: confirmed,
+      ...(titleChanged && { title: novelTitle.trim() }),
+    });
     if (result.error) return { error: result.error };
     setBaseline(normalized);
     setSavedConfirmed(confirmed);
+    setSavedTitle(novelTitle.trim());
     return { ok: true };
   }
   // 저장·반영·승인·초안 버리기 중에는 자동 저장이 끼어들지 않게, 효과·이벤트에서 읽는 최신 잠금 상태.
@@ -163,7 +175,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
 
   useEffect(() => {
     if (dirty && !locked) notifyAutosave();
-  }, [chapters, confirmed, dirty, locked, notifyAutosave]);
+  }, [chapters, confirmed, novelTitle, dirty, locked, notifyAutosave]);
 
   // 문단을 옮기거나 화면이 가려질 때는 기다리지 않고 바로 저장한다.
   useEffect(() => {
@@ -249,15 +261,18 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
     // 문단 안에 넣은 빈 줄은 저장 시 문단 나눔이 되므로, 저장 전에 화면 상태도 같은 모양으로 맞춘다.
     const normalized = chapters.map((c) => ({ ...c, paragraphs: normalizeParagraphs(c.paragraphs) }));
     if (isReview) {
+      const titleChanged = novelTitle.trim() !== savedTitle;
       const result = await saveMasterReviewAction({
         sessionId: detail.id,
         edits: buildSaveEdits(normalized, baseline),
         confirmedChapters: confirmed,
+        ...(titleChanged && { title: novelTitle.trim() }),
       });
       if (result.error) {
         setError(result.error);
         return false;
       }
+      setSavedTitle(novelTitle.trim());
     } else {
       // 게시본의 임시 저장은 초안 저장이다. 게시된 글은 handleApply(게시본에 반영)만 바꾼다.
       if (staleDraft) {
@@ -369,13 +384,16 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
     setApproved(true);
   }
 
+  // 검토 모드는 편집 중인 소설 제목(비어 있으면 제목 없음), 게시본은 게시된 제목을 쓴다.
+  const shownTitle = isReview ? novelTitle.trim() || null : detail.title;
+
   // 저장 여부와 상관없이 지금 화면의 원고(chapters)를 내려받는다.
   function handleDownload(format: "txt" | "pdf") {
-    const fileName = manuscriptFileName(detail.title, detail.id, format);
+    const fileName = manuscriptFileName(shownTitle, detail.id, format);
     if (format === "txt") {
-      downloadTextFile(fileName, buildManuscriptText({ title: detail.title, chapters }));
+      downloadTextFile(fileName, buildManuscriptText({ title: shownTitle, chapters }));
     } else {
-      printHtml(buildPrintHtml({ title: detail.title, level: detail.level, chapters }), fileName.replace(/\.pdf$/, ""));
+      printHtml(buildPrintHtml({ title: shownTitle, level: detail.level, chapters }), fileName.replace(/\.pdf$/, ""));
     }
   }
 
@@ -385,7 +403,22 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
     <div className="flex flex-col gap-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-2">
-          <h1 className="text-xl font-semibold tracking-tight">{detail.title ?? "(제목 없음)"}</h1>
+          {isReview ? (
+            <input
+              aria-label="소설 제목"
+              placeholder="(제목 없음)"
+              value={novelTitle}
+              maxLength={MAX_TITLE_CHARS}
+              disabled={locked}
+              onChange={(e) => {
+                setSavedAt(false);
+                setNovelTitle(e.target.value);
+              }}
+              className="h-10 w-full min-w-0 rounded-lg border border-transparent bg-transparent px-2 text-xl font-semibold tracking-tight outline-none hover:border-input focus-visible:border-input focus-visible:ring-3 focus-visible:ring-ring/50 sm:min-w-96"
+            />
+          ) : (
+            <h1 className="text-xl font-semibold tracking-tight">{detail.title ?? "(제목 없음)"}</h1>
+          )}
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant="secondary">{detail.level}</Badge>
             <Badge variant="outline">{isReview ? "한국어 마스터" : "게시된 한국어 소설"}</Badge>
@@ -547,7 +580,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
 
           {view === "read" ? (
             <FullReadView
-              title={detail.title}
+              title={shownTitle}
               level={detail.level}
               chapters={chapters}
               memoByKey={memoByKey}
