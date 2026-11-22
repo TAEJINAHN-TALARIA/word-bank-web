@@ -37,12 +37,14 @@ function findQuotes(text: string): Quote[] | null {
 // "separate"는 여기에 더해 대사가 끝난 뒤에서도 나눈다. 닫는 따옴표에 글자가 붙은(`”라고`) 경우, 쉼표로 끝난
 // (`,” 그가 말했다`) 경우, 문장 끝 부호 없이 끝난 경우는 말투 표시가 대사에서 떨어져 나가므로 떼지 않는다.
 function splitPoints(text: string, quotes: Quote[], mode: DialogueSplitMode): number[] {
+  // 닫는 따옴표 뒤에 공백을 두고 이어지는 말투 표시(`“가자!” 하고 소리쳤다`)는 문장이 이어지므로 떼지 않는다.
+  const ATTACHED_TAIL = /^\s+(?:이?라(?:고|며|는)|하(?:고|며|면서|는|자))/;
   const points: number[] = [];
   const dialogueStart: boolean[] = [];
   quotes.forEach((q, i) => {
     if (q.kind === "close") {
       const after = text.slice(q.index + 1);
-      if (mode === "separate" && dialogueStart[i - 1] && /[.!?…]/.test(text[q.index - 1]) && /^\s/.test(after) && after.trim()) {
+      if (mode === "separate" && dialogueStart[i - 1] && /[.!?…]/.test(text[q.index - 1]) && /^\s/.test(after) && after.trim() && !ATTACHED_TAIL.test(after)) {
         points.push(q.index + 1);
       }
       return;

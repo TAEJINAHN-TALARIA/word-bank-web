@@ -141,6 +141,21 @@ describe("splitDialogue — 대사만 따로", () => {
     });
   });
 
+  it("끝 부호 뒤에 공백을 두고 이어지는 말투 표시(하고·라고…)는 떼지 않는다", () => {
+    expect(separate(["그가 웃었다. “가자!” 하고 소리쳤다."])).toEqual({
+      paragraphs: ["그가 웃었다.", "“가자!” 하고 소리쳤다."],
+      skipped: [],
+    });
+    expect(separate(["그가 웃었다. “가.” 라고 말했다."])).toEqual({
+      paragraphs: ["그가 웃었다.", "“가.” 라고 말했다."],
+      skipped: [],
+    });
+    expect(separate(["그가 웃었다. “정말?” 하는 소리에 놀랐다."])).toEqual({
+      paragraphs: ["그가 웃었다.", "“정말?” 하는 소리에 놀랐다."],
+      skipped: [],
+    });
+  });
+
   it("문장 중간의 인용은 나누지 않는다", () => {
     const input = ["사회자가 마이크를 잡고 “마지막 참가 번호 7번, 윤…”라는 안내 방송을 송출했습니다. 아무도 없었습니다."];
     expect(separate(input)).toEqual({ paragraphs: input, skipped: [] });
