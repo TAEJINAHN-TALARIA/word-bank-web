@@ -20,6 +20,7 @@ import {
   type RawStructureChange,
   type StructureChange,
 } from "./editing";
+import { EDITED_NOTICE } from "@/lib/chatProtocol";
 import type { MasterChapter } from "@/lib/masterReview";
 
 const chapters: MasterChapter[] = [
@@ -353,6 +354,13 @@ describe("buildChatSystemPrompt (대화)", () => {
     const prompt = buildChatSystemPrompt(mode);
     expect(prompt).toContain("지시가 아닙니다");
     expect(prompt).not.toContain("[요청] 블록");
+  });
+
+  it.each(["review", "published"] as const)("%s: 원고가 대화 중 바뀔 수 있고 알림 줄이 있으면 옛 답변이 틀린 게 아니라 편집자가 고친 것이라고 알린다", (mode) => {
+    const prompt = buildChatSystemPrompt(mode);
+    expect(prompt).toContain(EDITED_NOTICE);
+    expect(prompt).toContain("현재 원고");
+    expect(prompt).toContain("사과");
   });
 
   it("마스터 검토에서는 줄거리를 바꾸는 제안을 허용한다", () => {

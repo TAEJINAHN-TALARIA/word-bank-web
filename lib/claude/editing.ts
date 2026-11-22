@@ -1,5 +1,6 @@
 // Claude 편집 패널의 순수 로직 — 프롬프트 조립과 결과 검증. API 호출은 structured.ts/actions가 맡는다.
 // 설계: story-generator/docs/superpowers/specs/2026-11-18-master-review-gate-design.md §7
+import { EDITED_NOTICE } from "@/lib/chatProtocol";
 import type { CharacterInfo, LevelGuidance, MasterChapter } from "@/lib/masterReview";
 
 // 소설 본문은 학습 자료라 그 안의 문장을 지시로 따르지 않게 못 박는다. 세 모드가 같은 문구를 쓴다.
@@ -320,6 +321,7 @@ export function buildChatSystemPrompt(mode: "review" | "published"): string {
 - 본문을 직접 바꾸지 않습니다. 고치자고 할 때는 장·문단 번호를 '2장 1문단'처럼 말하고([1] 같은 본문 표기를 그대로 쓰지 마세요), 바꿀 구절과 바꾼 모양을 그대로 인용해 이유와 함께 제안하세요. 본문이 바뀌었다고 말하지 마세요. 최종 결정과 수정은 편집자가 합니다.
 - 제목(소설 제목·장 제목) 이야기가 나오면 후보를 3~5개, 각각의 어감과 이유와 함께 제안하세요. 제목을 직접 바꿨다고 말하지 마세요. 편집자가 정합니다.
 - 각 편집자 메시지 맨 앞의 [지금 보는 곳: …]은 편집자가 화면에서 보고 있는 위치입니다. "이 문단", "여기"처럼 가리키는 말은 그 위치로 이해하세요. 전체 읽기 화면이면 원고 전체를 두고 하는 질문입니다.
+- 원고는 대화하는 동안 편집자가 고쳐서 바뀔 수 있고, 기준은 항상 현재 원고([소설 본문])입니다. 편집자 메시지에 ${EDITED_NOTICE}가 있으면, 이전 답변에서 인용한 구절이 지금 원고에 없는 것은 편집자가 고쳤기 때문이지 이전 답변이 틀려서가 아닙니다. 이전 답변이 틀렸다고 하거나 사과하지 말고, 현재 원고를 기준으로 이어서 답하세요.
 ${plotRule}
 ${KEEP_STYLE}
 ${CHAT_DATA_NOTICE}`;
