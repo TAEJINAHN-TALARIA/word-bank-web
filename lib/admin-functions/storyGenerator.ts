@@ -115,6 +115,22 @@ export async function saveMasterReview(
   }
 }
 
+// 편집 창 "품질 점검"의 결과(story-generator의 evaluateMasterForReview). llm이 null이면 규칙 검사 실패로 심사를 건너뛴 것이다.
+export type EvaluationItem = { key: string; score: number; reason: string | null; problemPhrases?: string[]; gated: boolean };
+export type MasterEvaluation = {
+  ruleBase: { pass: boolean; failures: string[]; warnings: string[] };
+  llm: null | { error: string } | { pass: boolean; failItems: string[]; items: EvaluationItem[] };
+};
+
+// 편집 중인 전 챕터를 보내 Layer 6 마스터 게이트와 같은 점검을 읽기 전용으로 받는다(Gemini 호출 한 번, 수십 초).
+export async function evaluateMaster(sessionId: string, edits: MasterEdit[]): Promise<MasterEvaluation> {
+  const data = await postAdmin("adminEvaluateMaster", { sessionId, edits }, "점검 실패");
+  if (typeof data.ruleBase !== "object" || data.ruleBase === null || !("llm" in data)) {
+    throw new Error("점검 결과를 해석하지 못했습니다");
+  }
+  return { ruleBase: data.ruleBase as MasterEvaluation["ruleBase"], llm: data.llm as MasterEvaluation["llm"] };
+}
+
 export type ApproveMasterReviewResult = { resume: "batch" | "onDemand"; warnings: string[] };
 
 export async function approveMasterReview(sessionId: string): Promise<ApproveMasterReviewResult> {

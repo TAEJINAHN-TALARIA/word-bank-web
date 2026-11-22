@@ -17,6 +17,7 @@ import {
   polishParagraphAction,
   reviewStoryAction,
   ensurePreReviewAction,
+  evaluateMasterAction,
 } from "./masterReviewActions";
 import * as session from "@/lib/auth/session";
 import * as generator from "@/lib/admin-functions/storyGenerator";
@@ -56,8 +57,10 @@ describe("관리자 세션 재확인", () => {
     expect(await suggestStructureAction({ mode: "review", id: "s1", chapters, chapterNumber: 1 })).toEqual(expected);
     expect(await reviewStoryAction({ mode: "review", id: "s1", chapters, kind: "flow" })).toEqual(expected);
     expect(await ensurePreReviewAction("s1")).toEqual(expected);
+    expect(await evaluateMasterAction({ sessionId: "s1", chapters })).toEqual(expected);
 
     expect(generator.saveMasterReview).not.toHaveBeenCalled();
+    expect(generator.evaluateMaster).not.toHaveBeenCalled();
     expect(generator.approveMasterReview).not.toHaveBeenCalled();
     expect(editor.suggestIdeas).not.toHaveBeenCalled();
     expect(editor.polishParagraph).not.toHaveBeenCalled();
@@ -86,6 +89,32 @@ describe("saveMasterReviewAction", () => {
   it("함수 호출이 실패하면 메시지를 error로 돌려준다", async () => {
     vi.mocked(generator.saveMasterReview).mockRejectedValueOnce(new Error("본문이 비어 있습니다"));
     expect(await saveMasterReviewAction({ sessionId: "s1", edits: [], confirmedChapters: [] })).toEqual({ error: "본문이 비어 있습니다" });
+  });
+});
+
+describe("evaluateMasterAction", () => {
+  const evaluation = {
+    ruleBase: { pass: true, failures: [], warnings: [] },
+    llm: { pass: true, failItems: [], items: [] },
+  };
+
+  it("편집 중인 챕터를 MasterEdit(문단은 빈 줄로 이은 body)로 바꿔 함수에 넘기고 결과를 돌려준다", async () => {
+    vi.mocked(generator.evaluateMaster).mockResolvedValueOnce(evaluation);
+    const edited: MasterChapter[] = [{ chapterNumber: 2, chapterTitle: "둘째", paragraphs: ["첫 문단", "", "둘째 문단\n\n셋째 문단"] }];
+    expect(await evaluateMasterAction({ sessionId: "s1", chapters: edited })).toEqual({ result: evaluation });
+    expect(generator.evaluateMaster).toHaveBeenCalledWith("s1", [
+      { chapterNumber: 2, chapterTitle: "둘째", body: "첫 문단\n\n둘째 문단\n\n셋째 문단" },
+    ]);
+  });
+
+  it("챕터 형식이 올바르지 않으면 함수를 부르지 않고 error를 돌려준다", async () => {
+    expect(await evaluateMasterAction({ sessionId: "s1", chapters: [{ chapterNumber: "x" }] as never })).toHaveProperty("error");
+    expect(generator.evaluateMaster).not.toHaveBeenCalled();
+  });
+
+  it("함수가 실패하면 메시지를 error로 돌려준다", async () => {
+    vi.mocked(generator.evaluateMaster).mockRejectedValueOnce(new Error("점검 실패 (500)"));
+    expect(await evaluateMasterAction({ sessionId: "s1", chapters })).toEqual({ error: "점검 실패 (500)" });
   });
 });
 

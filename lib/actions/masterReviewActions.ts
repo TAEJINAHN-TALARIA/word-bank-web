@@ -5,10 +5,12 @@ import { getAdminSession } from "@/lib/auth/session";
 import { getAdminFirestore } from "@/lib/firebase/admin";
 import {
   saveMasterReview,
+  evaluateMaster,
   approveMasterReview,
   resumeOnDemand,
   editPublishedStory,
   type MasterEdit,
+  type MasterEvaluation,
   type PublishedEdit,
 } from "@/lib/admin-functions/storyGenerator";
 import { getMasterReview } from "@/lib/data/masterReviews";
@@ -22,7 +24,15 @@ import {
   type StoryReviewResult,
 } from "@/lib/claude/editor";
 import type { Idea, IdeaDirection, PolishChange, RejectedChange, StoryReviewKind, StructureChange } from "@/lib/claude/editing";
-import { PUBLISHED_DRAFTS_COLLECTION, findUnsavableTitle, type PreReviewItem } from "@/lib/masterReview";
+import {
+  PUBLISHED_DRAFTS_COLLECTION,
+  findUnsavableTitle,
+  isValidChaptersInput,
+  normalizeParagraphs,
+  paragraphsToBody,
+  type MasterChapter,
+  type PreReviewItem,
+} from "@/lib/masterReview";
 
 /**
  * Next.js는 프로덕션에서 Server Action이 throw한 에러 메시지를 마스킹한다.
@@ -53,6 +63,25 @@ export async function saveMasterReviewAction(input: {
   }
   revalidatePath("/admin/edit");
   return {};
+}
+
+// 편집 중인 글(chapters)에 Layer 6 마스터 게이트와 같은 점검을 돌려 결과만 받는다(읽기 전용, 승인과 무관).
+export async function evaluateMasterAction(input: {
+  sessionId: string;
+  chapters: MasterChapter[];
+}): Promise<{ error?: string; result?: MasterEvaluation }> {
+  if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  if (!isValidChaptersInput(input.chapters)) return { error: "본문 형식이 올바르지 않습니다" };
+  const edits: MasterEdit[] = input.chapters.map((c) => ({
+    chapterNumber: c.chapterNumber,
+    chapterTitle: c.chapterTitle,
+    body: paragraphsToBody(normalizeParagraphs(c.paragraphs)),
+  }));
+  try {
+    return { result: await evaluateMaster(input.sessionId, edits) };
+  } catch (err) {
+    return { error: messageOf(err, "품질 점검 실패") };
+  }
 }
 
 export async function approveMasterReviewAction(
