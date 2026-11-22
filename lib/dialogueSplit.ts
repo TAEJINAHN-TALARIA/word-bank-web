@@ -15,12 +15,16 @@ type Quote = { index: number; kind: "open" | "close" };
 function findQuotes(text: string): Quote[] | null {
   const quotes: Quote[] = [];
   let open = false;
+  let curlyOpen = false;
   for (let index = 0; index < text.length; index++) {
     const ch = text[index];
     if (ch !== "“" && ch !== "”" && ch !== '"') continue;
-    const kind: Quote["kind"] = ch ==="“" ? "open" : ch === "”" ? "close" : open ? "close" : "open";
+    // 굽은 따옴표 대사 안의 곧은 "는 닫는 것인지 안쪽 인용인지 알 수 없어 짝이 어긋난 것으로 본다.
+    if (ch === '"' && curlyOpen) return null;
+    const kind: Quote["kind"] = ch === "“" ? "open" : ch === "”" ? "close" : open ? "close" : "open";
     if ((kind === "open") === open) return null;
     open = kind === "open";
+    curlyOpen = open && ch === "“";
     quotes.push({ index, kind });
   }
   return open ? null : quotes;

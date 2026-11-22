@@ -61,6 +61,11 @@ describe("splitDialogue", () => {
     expect(splitDialogue(['그가 말했다. "안녕'])).toEqual({ paragraphs: ['그가 말했다. "안녕'], skipped: [1] });
   });
 
+  it("굽은 따옴표 대사 안에 곧은 따옴표가 들어 있으면 짝이 어긋난 것으로 보고 건너뛴다", () => {
+    const input = ['그가 말했다. “그는 말했어. "가." 끝.”'];
+    expect(splitDialogue(input)).toEqual({ paragraphs: input, skipped: [1] });
+  });
+
   it("두 번 적용해도 결과가 같고 글자를 바꾸지 않는다", () => {
     const inputs = [
       ["그가 문을 열었습니다. “안녕하세요.” 그는 고개를 숙였습니다. “들어오세요.” 저는 대답했습니다."],
