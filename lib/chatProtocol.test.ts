@@ -22,6 +22,13 @@ describe("focusLine / withFocus / stripFocus", () => {
     expect(focusLine(null)).toBe("[지금 보는 곳: 전체 읽기 화면]");
   });
 
+  it("제목을 보고 있으면 소설 제목·장 제목이라고 적는다", () => {
+    expect(focusLine({ novelTitle: true })).toBe("[지금 보는 곳: 소설 제목]");
+    expect(focusLine({ chapterNumber: 3, chapterTitle: true })).toBe("[지금 보는 곳: 3장 제목]");
+    expect(stripFocus(withFocus("질문", { novelTitle: true }))).toBe("질문");
+    expect(stripFocus(withFocus("질문", { chapterNumber: 3, chapterTitle: true }))).toBe("질문");
+  });
+
   it("withFocus는 질문 앞에 포커스 줄을 붙이고 stripFocus가 되돌린다", () => {
     const focus = { chapterNumber: 3, paragraphIndex: 1 };
     expect(withFocus("질문", focus)).toBe("[지금 보는 곳: 3장 2문단]\n질문");

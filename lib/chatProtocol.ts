@@ -4,8 +4,12 @@
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
 
-// 편집자가 화면에서 보고 있는 문단. 전체 읽기 화면이면 null.
-export type ChatFocus = { chapterNumber: number; paragraphIndex: number } | null;
+// 편집자가 화면에서 보고 있는 곳: 문단, 소설 제목, 장 제목. 전체 읽기 화면이면 null.
+export type ChatFocus =
+  | { chapterNumber: number; paragraphIndex: number }
+  | { novelTitle: true }
+  | { chapterNumber: number; chapterTitle: true }
+  | null;
 
 export type ChatEvent =
   | { t: "delta"; text: string }
@@ -23,9 +27,10 @@ export const CHAT_LIMITS = {
 const PARSE_ERROR: ChatEvent = { t: "error", message: "응답을 해석하지 못했습니다" };
 
 export function focusLine(focus: ChatFocus): string {
-  return focus
-    ? `[지금 보는 곳: ${focus.chapterNumber}장 ${focus.paragraphIndex + 1}문단]`
-    : "[지금 보는 곳: 전체 읽기 화면]";
+  if (!focus) return "[지금 보는 곳: 전체 읽기 화면]";
+  if ("novelTitle" in focus) return "[지금 보는 곳: 소설 제목]";
+  if ("chapterTitle" in focus) return `[지금 보는 곳: ${focus.chapterNumber}장 제목]`;
+  return `[지금 보는 곳: ${focus.chapterNumber}장 ${focus.paragraphIndex + 1}문단]`;
 }
 
 // 이전 대화가 매 요청 같은 모양으로 재전송되어 캐시가 깨지지 않도록, 포커스 줄은 보낼 때의 값으로 메시지에 박아 둔다.

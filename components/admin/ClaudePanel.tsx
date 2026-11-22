@@ -7,7 +7,7 @@ import type { CharacterInfo, LevelGuidance, PreReviewItem, MasterChapter } from 
 import { Button } from "@/components/ui/button";
 import { InlineError } from "@/components/admin/InlineError";
 import { ReferenceCards } from "@/components/admin/ReferenceCards";
-import { EditorChat } from "@/components/admin/EditorChat";
+import { EditorChat, type ChatTarget } from "@/components/admin/EditorChat";
 import { useEditorChat } from "@/components/admin/useEditorChat";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import type { ChatFocus } from "@/lib/chatProtocol";
@@ -39,6 +39,7 @@ export function ClaudePanel({
   memosError,
   disabled,
   focus,
+  novelTitle,
   onJump,
 }: {
   mode: "review" | "published";
@@ -56,6 +57,8 @@ export function ClaudePanel({
   disabled: boolean;
   // 편집 화면에서 보고 있는 문단(대화에 함께 보낸다). 전체 읽기 화면이면 null.
   focus: ChatFocus;
+  // 편집 중인 소설 제목(검토 모드). 대화에 함께 보내 Claude가 고치는 중의 제목을 보게 한다.
+  novelTitle?: string;
   onJump: (chapterNumber: number, paragraphIndex: number) => void;
 }) {
   const [response, setResponse] = useState<ReviewResponse | null>(null);
@@ -64,6 +67,15 @@ export function ClaudePanel({
   // 대화는 탭·화면 전환에도 유지되도록 탭 패널 밖(이 컴포넌트)에서 들고 있는다.
   const chat = useEditorChat({ mode, id });
   const [chatDraft, setChatDraft] = useState("");
+  const [chatTarget, setChatTarget] = useState<ChatTarget>("paragraph");
+  // 문단을 보고 있을 때만 제목 대상을 고를 수 있다(전체 읽기 화면은 지금처럼 전체 원고).
+  const canTarget = mode === "review" && focus !== null && "paragraphIndex" in focus;
+  const chatFocus: ChatFocus =
+    canTarget && chatTarget === "novelTitle"
+      ? { novelTitle: true }
+      : canTarget && chatTarget === "chapterTitle"
+        ? { chapterNumber: (focus as { chapterNumber: number }).chapterNumber, chapterTitle: true }
+        : focus;
 
   async function runReview(label: string, kind: StoryReviewKind, instruction?: string) {
     setPendingLabel(label);
@@ -195,10 +207,13 @@ export function ClaudePanel({
             turns={chat.turns}
             sending={chat.sending}
             disabled={disabled}
-            focus={focus}
+            focus={chatFocus}
+            target={chatTarget}
+            onTargetChange={setChatTarget}
+            showTargets={canTarget}
             draft={chatDraft}
             onDraftChange={setChatDraft}
-            onSend={(text) => void chat.send(text, { chapters, focus })}
+            onSend={(text) => void chat.send(text, { chapters, focus: chatFocus, ...(novelTitle?.trim() && { title: novelTitle }) })}
             onStop={chat.stop}
           />
         </TabsContent>

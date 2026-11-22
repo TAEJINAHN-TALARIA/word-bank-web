@@ -7,6 +7,7 @@ import { parseChatRequest, streamChat } from "./chat";
 import { buildChatSystemPrompt } from "./editing";
 import * as structured from "./structured";
 import { CHAT_LIMITS, type ChatEvent, type ChatMessage } from "@/lib/chatProtocol";
+import { MAX_TITLE_CHARS } from "@/lib/masterReview";
 
 const chapters = [{ chapterNumber: 1, chapterTitle: "첫째", paragraphs: ["하린은 문을 열었다."] }];
 const messages: ChatMessage[] = [{ role: "user", content: "[지금 보는 곳: 1장 1문단]\n이 문단 어때?" }];
@@ -25,6 +26,22 @@ describe("parseChatRequest", () => {
 
   it("게시본 모드도 받는다", () => {
     expect(parseChatRequest({ ...valid, mode: "published" }).ok).toBe(true);
+  });
+
+  it("편집 중인 소설 제목(title)은 다듬은 값으로 돌려주고, 없으면 값에도 없다", () => {
+    const withTitle = parseChatRequest({ ...valid, title: "  새 제목  " });
+    expect(withTitle.ok && withTitle.value.title).toBe("새 제목");
+    const without = parseChatRequest(valid);
+    expect(without.ok && "title" in without.value).toBe(false);
+  });
+
+  it.each([
+    ["빈 제목", ""],
+    ["공백뿐인 제목", "   "],
+    ["한도를 넘는 제목", "가".repeat(MAX_TITLE_CHARS + 1)],
+    ["문자열이 아닌 제목", 123],
+  ])("title이 올바르지 않으면 거절한다: %s", (_name, title) => {
+    expectRejected({ ...valid, title });
   });
 
   it.each([

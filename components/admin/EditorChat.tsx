@@ -7,6 +7,22 @@ import type { ChatTurn } from "@/components/admin/useEditorChat";
 import { stripFocus, type ChatFocus } from "@/lib/chatProtocol";
 import { cn } from "@/lib/utils";
 
+// 대화에서 가리킬 대상. 문단은 지금 보는 문단, 제목은 소설 제목·지금 보는 장의 제목이다.
+export type ChatTarget = "paragraph" | "chapterTitle" | "novelTitle";
+
+const TARGETS: { value: ChatTarget; label: string }[] = [
+  { value: "paragraph", label: "문단" },
+  { value: "chapterTitle", label: "이 장 제목" },
+  { value: "novelTitle", label: "소설 제목" },
+];
+
+function focusSummary(focus: ChatFocus): string {
+  if (!focus) return "전체 원고를 읽고 있어요";
+  if ("novelTitle" in focus) return "소설 제목을 두고 이야기해요 · 전체 원고도 함께 읽고 있어요";
+  if ("chapterTitle" in focus) return `${focus.chapterNumber}장 제목을 두고 이야기해요 · 전체 원고도 함께 읽고 있어요`;
+  return `지금 보는 곳: ${focus.chapterNumber}장 ${focus.paragraphIndex + 1}문단 · 전체 원고도 함께 읽고 있어요`;
+}
+
 // 오른쪽 패널의 "대화" 탭. Claude는 원고 전체와 지금 보는 곳을 알고 있고, 고칠 곳을 제안만 한다(본문은 바꾸지 않는다).
 // 대화·입력 중인 글은 부모(ClaudePanel)가 들고 있어서 탭을 오가도 유지된다.
 export function EditorChat({
@@ -14,6 +30,9 @@ export function EditorChat({
   sending,
   disabled,
   focus,
+  target,
+  onTargetChange,
+  showTargets,
   draft,
   onDraftChange,
   onSend,
@@ -23,6 +42,10 @@ export function EditorChat({
   sending: boolean;
   disabled: boolean;
   focus: ChatFocus;
+  target: ChatTarget;
+  onTargetChange: (target: ChatTarget) => void;
+  // 문단을 편집하는 검토 화면에서만 제목 대상을 고를 수 있다.
+  showTargets: boolean;
   draft: string;
   onDraftChange: (draft: string) => void;
   onSend: (text: string) => void;
@@ -45,11 +68,23 @@ export function EditorChat({
 
   return (
     <section aria-label="Claude와 대화" className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3">
-      <p className="text-xs leading-snug text-muted-foreground">
-        {focus
-          ? `지금 보는 곳: ${focus.chapterNumber}장 ${focus.paragraphIndex + 1}문단 · 전체 원고도 함께 읽고 있어요`
-          : "전체 원고를 읽고 있어요"}
-      </p>
+      {showTargets && (
+        <div role="group" aria-label="대화 대상" className="flex flex-wrap gap-1.5">
+          {TARGETS.map((t) => (
+            <Button
+              key={t.value}
+              type="button"
+              size="sm"
+              variant={target === t.value ? "default" : "outline"}
+              aria-pressed={target === t.value}
+              onClick={() => onTargetChange(t.value)}
+            >
+              {t.label}
+            </Button>
+          ))}
+        </div>
+      )}
+      <p className="text-xs leading-snug text-muted-foreground">{focusSummary(focus)}</p>
 
       <div ref={listRef} role="log" aria-live="polite" className="flex max-h-[28rem] min-h-24 flex-col gap-2 overflow-y-auto">
         {turns.length === 0 && (

@@ -35,7 +35,7 @@ export function useEditorChat({ mode, id }: { mode: "review" | "published"; id: 
   useEffect(() => () => abortRef.current?.abort(), []);
 
   const send = useCallback(
-    async (text: string, context: { chapters: MasterChapter[]; focus: ChatFocus }) => {
+    async (text: string, context: { chapters: MasterChapter[]; focus: ChatFocus; title?: string }) => {
       const trimmed = text.trim();
       if (!trimmed || abortRef.current) return;
 
@@ -53,7 +53,13 @@ export function useEditorChat({ mode, id }: { mode: "review" | "published"; id: 
         const response = await fetch("/admin/editor-chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ mode, id, chapters: context.chapters, messages: trimHistory(history) }),
+          body: JSON.stringify({
+            mode,
+            id,
+            chapters: context.chapters,
+            messages: trimHistory(history),
+            ...(context.title !== undefined && { title: context.title }),
+          }),
           signal: controller.signal,
         });
         if (!response.ok) {

@@ -709,6 +709,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
           id={detail.id}
           view={view}
           focus={view === "edit" ? { chapterNumber: currentChapter.chapterNumber, paragraphIndex } : null}
+          novelTitle={isReview ? novelTitle : undefined}
           chapters={chapters}
           currentText={currentText}
           level={detail.level}

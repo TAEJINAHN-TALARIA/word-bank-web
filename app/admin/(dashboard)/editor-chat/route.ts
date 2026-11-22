@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
   const parsed = parseChatRequest(body);
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
-  const { mode, id, chapters, messages } = parsed.value;
+  const { mode, id, chapters, messages, title } = parsed.value;
 
   let context;
   try {
@@ -37,7 +37,8 @@ export async function POST(request: Request) {
   const abort = new AbortController();
   request.signal.addEventListener("abort", () => abort.abort(), { once: true });
 
-  const events = streamChat({ ...context, mode, messages, signal: abort.signal });
+  // 편집 중인 소설 제목이 있으면 저장된 제목 대신 그 값을 Claude에게 보여 준다.
+  const events = streamChat({ ...context, ...(title !== undefined && { title }), mode, messages, signal: abort.signal });
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({
     async pull(controller) {

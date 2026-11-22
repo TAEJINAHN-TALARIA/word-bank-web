@@ -336,6 +336,13 @@ describe("buildChatSystemPrompt (대화)", () => {
     expect(prompt).toContain("[지금 보는 곳");
   });
 
+  it.each(["review", "published"] as const)("%s: 제목 이야기에는 후보를 이유와 함께 제안하되 직접 바꿨다고 말하지 않게 한다", (mode) => {
+    const prompt = buildChatSystemPrompt(mode);
+    expect(prompt).toContain("제목");
+    expect(prompt).toContain("후보");
+    expect(prompt).toContain("직접 바꿨다고");
+  });
+
   it.each(["review", "published"] as const)("%s: 편집자에게 존댓말로 답하고, 문단은 '2장 1문단'처럼 부르게 한다", (mode) => {
     const prompt = buildChatSystemPrompt(mode);
     expect(prompt).toContain("존댓말");
