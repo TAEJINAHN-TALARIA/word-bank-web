@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { splitDialogue } from "@/lib/dialogueSplit";
+import { splitDialogue, type DialogueSplitMode } from "@/lib/dialogueSplit";
 import { Button } from "@/components/ui/button";
 
 const touch = "h-11 px-4 text-sm";
 
 /**
  * 챕터 하나의 따옴표 대사를 문단으로 나눈 결과를 미리 보고 적용한다(규칙 기반, 서버 호출 없음).
+ * 두 방식(대사만 따로 / 서술 붙이기)의 결과를 모두 계산해 버튼에 문단 수를 보여 주고, 고른 방식을 미리 보기에 쓴다.
  * 미리 보기는 열려 있는 동안 현재 본문으로 매번 다시 계산하므로 낡은 제안이 생기지 않는다.
- * 챕터가 바뀌면 부모가 key를 바꿔 닫힌 상태로 새로 시작한다.
+ * 챕터가 바뀌면 부모가 key를 바꿔 닫힌 상태·기본 방식(대사만 따로)으로 새로 시작한다.
  */
 export function DialogueSplit({
   paragraphs,
@@ -21,14 +22,18 @@ export function DialogueSplit({
   onApply: (paragraphs: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const result = open ? splitDialogue(paragraphs) : null;
+  const [mode, setMode] = useState<DialogueSplitMode>("separate");
+  const results = open
+    ? { separate: splitDialogue(paragraphs, "separate"), attach: splitDialogue(paragraphs, "attach") }
+    : null;
+  const result = results ? results[mode] : null;
   const changed = result !== null && result.paragraphs.length !== paragraphs.length;
 
   return (
     <section aria-label="대사 나누기" className="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="min-w-28 flex-1 text-sm font-semibold">대사 나누기</h3>
-        <span className="text-xs text-muted-foreground">지금 {paragraphs.length}문단 · 따옴표 대사 앞에서 문단을 나눠요. 글자는 바꾸지 않아요</span>
+        <span className="text-xs text-muted-foreground">지금 {paragraphs.length}문단 · 따옴표 대사를 문단으로 나눠요. 글자는 바꾸지 않아요</span>
       </div>
 
       {!open && (
@@ -37,8 +42,17 @@ export function DialogueSplit({
         </Button>
       )}
 
-      {result && (
+      {results && result && (
         <div className="flex flex-col gap-2.5 border-t border-border pt-3">
+          <div role="group" aria-label="나누는 방식" className="flex flex-wrap gap-2">
+            <Button type="button" className={touch} variant={mode === "separate" ? "default" : "outline"} aria-pressed={mode === "separate"} onClick={() => setMode("separate")}>
+              대사만 따로 ({results.separate.paragraphs.length}문단)
+            </Button>
+            <Button type="button" className={touch} variant={mode === "attach" ? "default" : "outline"} aria-pressed={mode === "attach"} onClick={() => setMode("attach")}>
+              서술 붙이기 ({results.attach.paragraphs.length}문단)
+            </Button>
+          </div>
+
           {result.skipped.length > 0 && (
             <p role="status" className="rounded-lg bg-muted px-3 py-2.5 text-sm leading-relaxed text-muted-foreground">
               따옴표 짝이 맞지 않아 건너뛴 문단: {result.skipped.join(", ")}
