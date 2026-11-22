@@ -86,6 +86,76 @@ describe("buildStoryContext", () => {
   });
 });
 
+describe("buildStoryContext 문단 중심(limitTo)", () => {
+  const limitedChapters: MasterChapter[] = [
+    { chapterNumber: 1, chapterTitle: "우산 가게의 아침", paragraphs: ["첫째 글.", "둘째 글.", "셋째 글.", "넷째 글."] },
+    { chapterNumber: 2, chapterTitle: "낯선 손님", paragraphs: ["다른 장 글."] },
+  ];
+  const input = {
+    title: "비 오는 날의 우산 가게",
+    level: "Lv3",
+    chapters: limitedChapters,
+    characters: [{ name: "하린", speechStyle: "합쇼체" }],
+    narrativeStyle: "-했다체",
+    levelGuidance: { sentenceLen: 30, unit: "자", stageLabel: "초등학교 고학년(5~6학년)" },
+  };
+  const NOTE = (n: number, m: number) => `(범위: ${n}장 ${m}문단과 앞뒤 한 문단만 보여 드립니다. 나머지 원고는 이 대화에 포함되지 않았습니다.)`;
+
+  it("가운데 문단이면 설정과 그 문단·앞뒤 한 문단만 원래 번호로 담는다", () => {
+    const context = buildStoryContext(input, { chapterNumber: 1, paragraphIndex: 1 });
+    expect(context).toContain("비 오는 날의 우산 가게");
+    expect(context).toContain("-했다체");
+    expect(context).toContain("하린: 합쇼체");
+    expect(context).toContain("[1] 첫째 글.");
+    expect(context).toContain("[2] 둘째 글.");
+    expect(context).toContain("[3] 셋째 글.");
+    expect(context).not.toContain("넷째 글.");
+  });
+
+  it("[소설 본문] 줄 바로 다음 줄에 범위 안내를 두고, 그 장 제목은 담지만 다른 장은 담지 않는다", () => {
+    const lines = buildStoryContext(input, { chapterNumber: 1, paragraphIndex: 1 }).split("\n");
+    const at = lines.indexOf("[소설 본문]");
+    expect(at).toBeGreaterThan(-1);
+    expect(lines[at + 1]).toBe(NOTE(1, 2));
+    expect(lines[at + 2]).toBe("## 1장. 우산 가게의 아침");
+    const context = lines.join("\n");
+    expect(context).not.toContain("낯선 손님");
+    expect(context).not.toContain("다른 장 글.");
+  });
+
+  it("첫 문단이면 뒤 한 문단만, 마지막 문단이면 앞 한 문단만 붙인다", () => {
+    const first = buildStoryContext(input, { chapterNumber: 1, paragraphIndex: 0 });
+    expect(first).toContain("[1] 첫째 글.");
+    expect(first).toContain("[2] 둘째 글.");
+    expect(first).not.toContain("셋째 글.");
+    const last = buildStoryContext(input, { chapterNumber: 1, paragraphIndex: 3 });
+    expect(last).toContain("[3] 셋째 글.");
+    expect(last).toContain("[4] 넷째 글.");
+    expect(last).not.toContain("둘째 글.");
+  });
+
+  it("그 장이나 문단이 현재 원고에 없으면 limitTo 없이 만든 전체 본문과 같다", () => {
+    const full = buildStoryContext(input);
+    expect(buildStoryContext(input, { chapterNumber: 9, paragraphIndex: 0 })).toBe(full);
+    expect(buildStoryContext(input, { chapterNumber: 1, paragraphIndex: 4 })).toBe(full);
+    expect(full).toContain("다른 장 글.");
+  });
+
+  it("limitTo를 주지 않으면 지금과 같은 전체 본문이다(범위 안내 없음)", () => {
+    expect(buildStoryContext(input)).not.toContain("(범위:");
+    expect(buildStoryContext(input, undefined)).toBe(buildStoryContext(input));
+  });
+});
+
+describe("대화 시스템 프롬프트의 범위 안내", () => {
+  it.each(["review", "published"] as const)("%s: 범위 안내가 있으면 일부만 본 것이라 추측하지 말고 전체 원고로 다시 묻게 안내한다", (mode) => {
+    const prompt = buildChatSystemPrompt(mode);
+    expect(prompt).toContain("(범위:");
+    expect(prompt).toContain("전체 원고");
+    expect(prompt).toContain("추측");
+  });
+});
+
 describe("task builders", () => {
   it("방향 제시: 대상 위치(1부터)와 현재 문단, 선택 지시, 3가지·스케치·연결 안내를 담는다", () => {
     const task = buildIdeasTask({ chapterNumber: 1, paragraphIndex: 1, paragraph: "하늘이 흐렸다.", instruction: "더 긴장되게" });
