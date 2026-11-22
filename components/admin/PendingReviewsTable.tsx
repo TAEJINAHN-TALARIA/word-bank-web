@@ -277,6 +277,9 @@ export function PendingReviewsTable({ initialItems }: { initialItems: PendingRev
                         <TableCell>
                           <div className="flex flex-col gap-1">
                             <Badge variant={statusBadgeVariant(item.gateStatus)}>{item.gateStatus}</Badge>
+                            {item.target === "master" && item.masterReviewed !== false && item.gateStatus === "fail" && (
+                              <span className="text-xs leading-snug text-muted-foreground">승인한 마스터의 점검 기록이에요(참고용, 발행을 막지 않아요)</span>
+                            )}
                             {item.masterReviewed === false && (
                               <Badge variant="warning" title="마스터 검토 게이트가 생기기 전에 만들어져 사람이 읽고 승인하지 않은 소설입니다">
                                 마스터 미검토

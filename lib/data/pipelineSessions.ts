@@ -1,5 +1,6 @@
 import "server-only";
 import { getAdminFirestore } from "@/lib/firebase/admin";
+import { formatGateReasons } from "@/lib/gateReasons";
 
 export type ComboInfo = {
   mainPremise: string;
@@ -114,7 +115,8 @@ export async function getPipelineSessionDetail(
       target: gateDoc.id,
       latestStatus: gateData.latestStatus,
       ruleBaseWarnings: gateData.ruleBaseWarnings ?? [],
-      llmEvalReasons: gateData.llmEvalReasons ?? [],
+      // 게이트가 항목 키별 객체로 저장한 사유를 화면의 문자열 목록으로 바꾼다(객체를 그대로 넘기면 렌더가 던진다).
+      llmEvalReasons: formatGateReasons(gateData.llmEvalReasons),
       retryCount: gateData.retryCount ?? 0,
     };
   });

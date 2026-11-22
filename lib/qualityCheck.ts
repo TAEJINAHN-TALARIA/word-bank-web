@@ -1,6 +1,6 @@
 // 편집 화면 "품질 점검"의 순수 로직. "server-only"를 import하지 않으므로 클라이언트 컴포넌트에서 바로 쓴다.
 // 설계: docs/superpowers/specs/2026-11-22-master-quality-check-design.md
-import type { MasterChapter } from "@/lib/masterReview";
+import { normalizeParagraphs, type MasterChapter } from "@/lib/masterReview";
 import type { MasterEvaluation } from "@/lib/admin-functions/storyGenerator";
 
 // 심사 항목 키 → 한국어 이름. characterVoiceConsistency는 판정에 넣지 않는 참고 항목이라 이름에도 밝힌다.
@@ -42,8 +42,10 @@ export function findPhraseLocation(
 }
 
 // 점검한 뒤 글이 바뀌었는지 비교하는 열쇠. 장 번호·제목·문단이 하나라도 달라지면 달라진다.
+// 점검은 저장과 같은 정규화(빈 문단 버림, 문단 안의 빈 줄은 문단 나눔)를 거친 글을 보내므로 열쇠도 정규화한 문단으로 만든다 —
+// 그래야 저장이 화면 글을 정규화한 것만으로 "글이 바뀌었어요"가 뜨지 않는다.
 export function chaptersKey(chapters: MasterChapter[]): string {
-  return JSON.stringify(chapters.map((c) => [c.chapterNumber, c.chapterTitle, c.paragraphs]));
+  return JSON.stringify(chapters.map((c) => [c.chapterNumber, c.chapterTitle, normalizeParagraphs(c.paragraphs)]));
 }
 
 // 승인 줄에 보여줄 한 줄. 승인은 막지 않는다(참고용).

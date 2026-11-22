@@ -24,7 +24,7 @@
 - `decideMasterGateFailure(session)`: 승인된 마스터면 `'continue'`, 아니면 `'regenerate'`.
 - 배치 경로 `finishLayer6Round`와 온디맨드 경로 `runTranslationAndGateLoop`: 마스터 게이트가 `pass`가 아니면 — `regenerate`는 기존 동작 그대로(배치 `handleDraftFailure`, 온디맨드 Layer 2 재시도), `continue`는 `console.warn`으로 사유를 남기고 막지 않은 채 다음 단계(언어별 게이트 재시도 판단)로 진행한다.
 - `returnToMasterReview`와 오케스트레이터의 import를 제거한다. 과거에 되돌려진 세션의 `masterReview.gateNote`는 그대로 두고, 웹의 배너도 그 데이터를 위해 남긴다.
-- `layer6Gates/master`의 기록 모양은 그대로(`status: 'fail'`, `llmEvalReasons`). 이 값을 읽는 곳은 마스터 게이트 판단 두 군데뿐이다.
+- `layer6Gates/master`의 기록 모양은 그대로(`status: 'fail'`, `llmEvalReasons`). 이 값을 읽는 곳은 마스터 게이트 판단 두 군데와 발행 대기 목록(`listPendingReviews`)이다. 발행 대기 목록에서는 승인한 마스터가 `fail`로 보이므로 웹이 "승인한 마스터의 점검 기록(참고용)" 라벨을 붙이고, 생성 상세 화면은 객체로 저장된 사유를 문자열 목록으로 바꿔 보여 준다(`lib/gateReasons.ts`).
 
 ### 2. story-generator — `adminEvaluateMaster`
 
@@ -54,5 +54,5 @@
 ## 알려 둘 한계
 
 - 점검 한 번이 Gemini 호출 한 번(수십 초). 글이 바뀌면 다시 눌러야 한다.
-- 승인된 마스터의 탈락이 더는 눈에 띄지 않는다 — `layer6Gates/master`와 Cloud Functions 로그에만 남는다.
+- 승인된 마스터의 탈락이 더는 눈에 띄지 않는다 — `layer6Gates/master`(생성 상세 화면·발행 대기 목록의 `fail` 배지)와 Cloud Functions 로그에만 남는다.
 - 파이프라인(오케스트레이터) 변경이라 배포는 `adminEvaluateMaster` 하나만이 아니라 게이트가 도는 함수들(`pollAllSessions`·`resumeOnDemand` 등)도 함께 올려야 한다.

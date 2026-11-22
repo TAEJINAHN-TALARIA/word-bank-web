@@ -54,6 +54,13 @@ describe("chaptersKey", () => {
     const titleChanged = [{ ...chapters[0], chapterTitle: "바뀐 제목" }, chapters[1]];
     expect(chaptersKey(titleChanged)).not.toBe(chaptersKey(chapters));
   });
+
+  it("저장이 정규화하는 차이(빈 문단 추가, 문단 안의 빈 줄)만 있으면 같다 — 저장 뒤 화면 글이 정규화돼도 낡음으로 보지 않는다", () => {
+    const withEmpty = [{ ...chapters[0], paragraphs: [chapters[0].paragraphs[0], "", chapters[0].paragraphs[1]] }, chapters[1]];
+    expect(chaptersKey(withEmpty)).toBe(chaptersKey(chapters));
+    const withBlankLine = [{ ...chapters[0], paragraphs: [chapters[0].paragraphs[0] + String.fromCharCode(10, 10) + "덧붙인 문단", chapters[0].paragraphs[1]] }, chapters[1]];
+    expect(chaptersKey(withBlankLine)).toBe(chaptersKey([{ ...chapters[0], paragraphs: [chapters[0].paragraphs[0], "덧붙인 문단", chapters[0].paragraphs[1]] }, chapters[1]]));
+  });
 });
 
 describe("approvalNote", () => {
