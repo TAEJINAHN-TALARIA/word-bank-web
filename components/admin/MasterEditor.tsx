@@ -43,6 +43,7 @@ import { formatClock, type AutosaveResult } from "@/lib/autosaver";
 import { downloadTextFile, printHtml } from "@/components/admin/manuscriptDownload";
 import { buildManuscriptText, buildPrintHtml, manuscriptFileName } from "@/lib/manuscriptExport";
 import { StructureSuggestions } from "@/components/admin/StructureSuggestions";
+import { DialogueSplit } from "@/components/admin/DialogueSplit";
 import { cn } from "@/lib/utils";
 
 type Selected = { chapterNumber: number; paragraphIndex: number };
@@ -198,6 +199,13 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
 
   function updateParagraph(chapterNumber: number, index: number, text: string) {
     updateChapter(chapterNumber, (c) => ({ ...c, paragraphs: c.paragraphs.map((p, i) => (i === index ? text : p)) }));
+  }
+
+  // 문단 구성 제안·대사 나누기가 같은 방식으로 현재 장의 문단을 통째로 바꾼다.
+  function applyParagraphs(paragraphs: string[]) {
+    if (!currentChapter) return;
+    updateChapter(currentChapter.chapterNumber, (c) => ({ ...c, paragraphs }));
+    setSelected({ chapterNumber: currentChapter.chapterNumber, paragraphIndex: 0 });
   }
 
   function insertAt(chapterNumber: number, at: number) {
@@ -628,10 +636,16 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
                   chapters={chapters}
                   chapterNumber={currentChapter.chapterNumber}
                   disabled={locked}
-                  onApply={(paragraphs) => {
-                    updateChapter(currentChapter.chapterNumber, (c) => ({ ...c, paragraphs }));
-                    setSelected({ chapterNumber: currentChapter.chapterNumber, paragraphIndex: 0 });
-                  }}
+                  onApply={applyParagraphs}
+                />
+              )}
+
+              {isReview && (
+                <DialogueSplit
+                  key={`dialogue-${currentChapter.chapterNumber}`}
+                  paragraphs={currentChapter.paragraphs}
+                  disabled={locked}
+                  onApply={applyParagraphs}
                 />
               )}
 
