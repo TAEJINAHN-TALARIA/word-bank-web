@@ -19,10 +19,13 @@ import {
   suggestIdeas,
   polishParagraph,
   suggestStructure,
+  polishChapter,
+  checkFacts,
   reviewStory,
   generatePreReview,
   type StoryReviewResult,
 } from "@/lib/claude/editor";
+import type { ChapterPolishChange, FactFinding } from "@/lib/claude/preprocessing";
 import type { Idea, IdeaDirection, PolishChange, RejectedChange, StoryReviewKind, StructureChange } from "@/lib/claude/editing";
 import {
   PUBLISHED_DRAFTS_COLLECTION,
@@ -216,6 +219,37 @@ export async function suggestStructureAction(
     return { changes };
   } catch (err) {
     return { error: messageOf(err, "문단 구성 제안 실패") };
+  }
+}
+
+// 마스터 전처리(③ 문장 다듬기, ④ 사실관계 점검). 문장과 사실을 고치는 제안이라 게시된 소설(표현 수정만 허용)에서는 받지 않는다.
+const PREPROCESS_PUBLISHED_ERROR = "게시된 소설은 마스터 전처리를 할 수 없습니다";
+
+export async function polishChapterAction(
+  input: ClaudeTarget & { chapterNumber: number; instruction?: string },
+): Promise<{ error?: string; changes?: ChapterPolishChange[]; received?: number }> {
+  if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  if (input.mode !== "review") return { error: PREPROCESS_PUBLISHED_ERROR };
+  if (tooLong(input.instruction)) return { error: "지시가 너무 깁니다" };
+  try {
+    const context = await loadEditorContext(input);
+    if ("error" in context) return context;
+    const { changes, received } = await polishChapter({ ...context, chapterNumber: input.chapterNumber, instruction: input.instruction });
+    return { changes, received };
+  } catch (err) {
+    return { error: messageOf(err, "문장 다듬기 실패") };
+  }
+}
+
+export async function checkFactsAction(input: ClaudeTarget): Promise<{ error?: string; findings?: FactFinding[] }> {
+  if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  if (input.mode !== "review") return { error: PREPROCESS_PUBLISHED_ERROR };
+  try {
+    const context = await loadEditorContext(input);
+    if ("error" in context) return context;
+    return { findings: await checkFacts(context) };
+  } catch (err) {
+    return { error: messageOf(err, "사실관계 점검 실패") };
   }
 }
 

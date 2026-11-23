@@ -15,6 +15,8 @@ import {
   suggestIdeasAction,
   suggestStructureAction,
   polishParagraphAction,
+  polishChapterAction,
+  checkFactsAction,
   reviewStoryAction,
   ensurePreReviewAction,
   evaluateMasterAction,
@@ -55,6 +57,8 @@ describe("관리자 세션 재확인", () => {
     expect(await suggestIdeasAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0 })).toEqual(expected);
     expect(await polishParagraphAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, paragraphIndex: 0 })).toEqual(expected);
     expect(await suggestStructureAction({ mode: "review", id: "s1", chapters, chapterNumber: 1 })).toEqual(expected);
+    expect(await polishChapterAction({ mode: "review", id: "s1", chapters, chapterNumber: 1 })).toEqual(expected);
+    expect(await checkFactsAction({ mode: "review", id: "s1", chapters })).toEqual(expected);
     expect(await reviewStoryAction({ mode: "review", id: "s1", chapters, kind: "flow" })).toEqual(expected);
     expect(await ensurePreReviewAction("s1")).toEqual(expected);
     expect(await evaluateMasterAction({ sessionId: "s1", chapters })).toEqual(expected);
@@ -64,6 +68,8 @@ describe("관리자 세션 재확인", () => {
     expect(generator.approveMasterReview).not.toHaveBeenCalled();
     expect(editor.suggestIdeas).not.toHaveBeenCalled();
     expect(editor.polishParagraph).not.toHaveBeenCalled();
+    expect(editor.polishChapter).not.toHaveBeenCalled();
+    expect(editor.checkFacts).not.toHaveBeenCalled();
   });
 });
 
@@ -307,5 +313,73 @@ describe("ensurePreReviewAction", () => {
 
     expect(await ensurePreReviewAction("s1")).toEqual({ items: generated });
     expect(update).toHaveBeenCalledWith({ "masterReview.preReview": generated });
+  });
+});
+
+describe("마스터 전처리 액션", () => {
+  it("문장 다듬기: 서버에서 설정집을 읽어 현재 본문과 함께 Claude에 넘기고 항목과 받은 개수를 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(detail());
+    const changes = [{ paragraphIndex: 0, before: "문을 ", after: "", reason: "군더더기예요" }];
+    vi.mocked(editor.polishChapter).mockResolvedValueOnce({ changes, received: 3 });
+
+    const result = await polishChapterAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, instruction: "더 짧게" });
+
+    expect(result).toEqual({ changes, received: 3 });
+    expect(editor.polishChapter).toHaveBeenCalledWith(
+      expect.objectContaining({ chapters, characters: detail().characters, level: "Lv3", chapterNumber: 1, instruction: "더 짧게" }),
+    );
+  });
+
+  it("문장 다듬기는 게시된 소설이면 Claude를 부르지 않고 거절한다", async () => {
+    const result = await polishChapterAction({ mode: "published", id: "d1", chapters, chapterNumber: 1 });
+    expect(result).toEqual({ error: "게시된 소설은 마스터 전처리를 할 수 없습니다" });
+    expect(editor.polishChapter).not.toHaveBeenCalled();
+  });
+
+  it("문장 다듬기의 지시가 너무 길면 Claude를 부르지 않고 거절한다", async () => {
+    const result = await polishChapterAction({ mode: "review", id: "s1", chapters, chapterNumber: 1, instruction: "가".repeat(501) });
+    expect(result).toEqual({ error: "지시가 너무 깁니다" });
+    expect(editor.polishChapter).not.toHaveBeenCalled();
+  });
+
+  it("문장 다듬기가 던지면 오류 메시지를 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(detail());
+    vi.mocked(editor.polishChapter).mockRejectedValueOnce(new Error("요청이 많아 잠시 뒤에 다시 시도해 주세요"));
+    expect(await polishChapterAction({ mode: "review", id: "s1", chapters, chapterNumber: 1 })).toEqual({
+      error: "요청이 많아 잠시 뒤에 다시 시도해 주세요",
+    });
+  });
+
+  it("문장 다듬기가 문자열 등 Error가 아닌 값을 던지면 기본 문구를 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(detail());
+    vi.mocked(editor.polishChapter).mockRejectedValueOnce("boom");
+    expect(await polishChapterAction({ mode: "review", id: "s1", chapters, chapterNumber: 1 })).toEqual({ error: "문장 다듬기 실패" });
+  });
+
+  it("사실관계 점검: 서버에서 설정집을 읽어 현재 본문 전체와 함께 Claude에 넘기고 항목을 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(detail());
+    const findings = [{ topic: "수진의 나이", description: "충돌", occurrences: [{ chapterNumber: 1, paragraphIndex: 0, quote: "하린" }], fix: null }];
+    vi.mocked(editor.checkFacts).mockResolvedValueOnce(findings);
+
+    const result = await checkFactsAction({ mode: "review", id: "s1", chapters });
+
+    expect(result).toEqual({ findings });
+    expect(editor.checkFacts).toHaveBeenCalledWith(
+      expect.objectContaining({ chapters, characters: detail().characters, narrativeStyle: "-했다체", level: "Lv3" }),
+    );
+  });
+
+  it("사실관계 점검은 게시된 소설이면 Claude를 부르지 않고 거절한다", async () => {
+    const result = await checkFactsAction({ mode: "published", id: "d1", chapters });
+    expect(result).toEqual({ error: "게시된 소설은 마스터 전처리를 할 수 없습니다" });
+    expect(editor.checkFacts).not.toHaveBeenCalled();
+  });
+
+  it("사실관계 점검이 던지면 오류 메시지를, Error가 아닌 값이면 기본 문구를 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValue(detail());
+    vi.mocked(editor.checkFacts).mockRejectedValueOnce(new Error("응답이 너무 길어요"));
+    expect(await checkFactsAction({ mode: "review", id: "s1", chapters })).toEqual({ error: "응답이 너무 길어요" });
+    vi.mocked(editor.checkFacts).mockRejectedValueOnce("boom");
+    expect(await checkFactsAction({ mode: "review", id: "s1", chapters })).toEqual({ error: "사실관계 점검 실패" });
   });
 });
