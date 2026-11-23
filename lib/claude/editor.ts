@@ -23,7 +23,17 @@ import {
   type StoryReviewKind,
   type StructureChange,
 } from "./editing";
-import { ideasSchema, polishSchema, preReviewSchema, storyReviewSchema, structureSchema } from "./schemas";
+import {
+  CHAPTER_POLISH_SYSTEM_PROMPT,
+  FACTS_SYSTEM_PROMPT,
+  buildChapterPolishTask,
+  buildFactsTask,
+  validateChapterPolish,
+  validateFactFindings,
+  type ChapterPolishResult,
+  type FactFinding,
+} from "./preprocessing";
+import { chapterPolishSchema, factsSchema, ideasSchema, polishSchema, preReviewSchema, storyReviewSchema, structureSchema } from "./schemas";
 import { callStructured } from "./structured";
 
 // 편집 화면이 서버 액션에 넘기는 소설 상태 — 본문은 화면에서 편집 중인 현재 본이다.
@@ -131,4 +141,32 @@ export async function generatePreReview(input: EditorContextInput): Promise<PreR
     task: buildPreReviewTask(),
   });
   return locateItems(raw.items, input.chapters);
+}
+
+// 전처리 ③ 문장 다듬기 — 챕터 전체를 읽고 담백하게 다듬을 곳 목록만 돌려준다. 본문은 바꾸지 않는다.
+export async function polishChapter(
+  input: EditorContextInput & { chapterNumber: number; instruction?: string },
+): Promise<ChapterPolishResult> {
+  const chapter = input.chapters.find((c) => c.chapterNumber === input.chapterNumber);
+  if (!chapter) throw new Error(`${input.chapterNumber}장을 찾을 수 없습니다`);
+  const raw = await callStructured({
+    schema: chapterPolishSchema,
+    effort: "medium",
+    system: CHAPTER_POLISH_SYSTEM_PROMPT,
+    context: buildStoryContext(input),
+    task: buildChapterPolishTask({ chapterNumber: input.chapterNumber, instruction: input.instruction }),
+  });
+  return validateChapterPolish(raw.changes, chapter.paragraphs);
+}
+
+// 전처리 ④ 사실관계 점검 — 모순은 장을 가로질러야 보이므로 원고 전체를 한 번에 읽는다.
+export async function checkFacts(input: EditorContextInput): Promise<FactFinding[]> {
+  const raw = await callStructured({
+    schema: factsSchema,
+    effort: "high",
+    system: FACTS_SYSTEM_PROMPT,
+    context: buildStoryContext(input),
+    task: buildFactsTask(),
+  });
+  return validateFactFindings(raw.findings, input.chapters);
 }

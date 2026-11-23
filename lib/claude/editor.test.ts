@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("./structured");
 
-import { suggestIdeas, polishParagraph, reviewStory, generatePreReview, suggestStructure } from "./editor";
+import { suggestIdeas, polishParagraph, reviewStory, generatePreReview, suggestStructure, polishChapter, checkFacts } from "./editor";
 import { SYSTEM_PROMPT, IDEAS_SYSTEM_PROMPT, POLISH_SYSTEM_PROMPT, STRUCTURE_SYSTEM_PROMPT } from "./editing";
+import { CHAPTER_POLISH_SYSTEM_PROMPT, FACTS_SYSTEM_PROMPT } from "./preprocessing";
 import * as structured from "./structured";
 import type { MasterChapter } from "@/lib/masterReview";
 
@@ -152,5 +153,73 @@ describe("generatePreReview", () => {
     expect(await generatePreReview(base)).toEqual([{ chapterNumber: 2, paragraphIndex: 0, kind: "긴 문장", text: "길어요" }]);
     expect(mockCall.mock.calls[0][0].effort).toBe("high");
     expect(mockCall.mock.calls[0][0].system).toBe(SYSTEM_PROMPT);
+  });
+});
+
+describe("polishChapter", () => {
+  it("장 다듬기 전용 프롬프트로 호출하고 유효한 항목만 받은 개수와 함께 돌려준다", async () => {
+    mockCall.mockResolvedValueOnce({
+      changes: [
+        { paragraphNumber: 2, before: "비가 올 것 같았다", after: "비가 올 듯했다", reason: "간결" },
+        { paragraphNumber: 2, before: "글에 없는 구절", after: "x", reason: "엉뚱함" },
+      ],
+    });
+
+    const result = await polishChapter({ ...base, chapterNumber: 1, instruction: "더 짧게" });
+
+    expect(result).toEqual({
+      changes: [{ paragraphIndex: 1, before: "비가 올 것 같았다", after: "비가 올 듯했다", reason: "간결" }],
+      received: 2,
+    });
+    const call = mockCall.mock.calls[0][0];
+    expect(call.system).toBe(CHAPTER_POLISH_SYSTEM_PROMPT);
+    expect(call.effort).toBe("medium");
+    expect(call.context).toContain("[2] 하늘이 흐렸다.");
+    expect(call.task).toContain("1장 전체 문단");
+    expect(call.task).toContain("더 짧게");
+  });
+
+  it("없는 장이면 Claude를 부르지 않고 오류를 던진다", async () => {
+    await expect(polishChapter({ ...base, chapterNumber: 9 })).rejects.toThrow();
+    expect(mockCall).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkFacts", () => {
+  it("전체 원고를 high effort로 보내고 검증된 항목만 돌려준다", async () => {
+    const fix = { chapterNumber: 2, paragraphNumber: 1, before: "할아버지", after: "할머니", reason: "처음 나온 값" };
+    mockCall.mockResolvedValueOnce({
+      findings: [
+        {
+          topic: "방문자",
+          description: "설명",
+          occurrences: [
+            { chapterNumber: 1, paragraphNumber: 1, quote: "하린" },
+            { chapterNumber: 2, paragraphNumber: 1, quote: "할아버지" },
+          ],
+          fix,
+        },
+        { topic: "엉뚱함", description: "d", occurrences: [{ chapterNumber: 1, paragraphNumber: 1, quote: "없는 구절" }], fix: { ...fix, before: "" } },
+      ],
+    });
+
+    const result = await checkFacts(base);
+
+    expect(result).toEqual([
+      {
+        topic: "방문자",
+        description: "설명",
+        occurrences: [
+          { chapterNumber: 1, paragraphIndex: 0, quote: "하린" },
+          { chapterNumber: 2, paragraphIndex: 0, quote: "할아버지" },
+        ],
+        fix: { chapterNumber: 2, paragraphIndex: 0, before: "할아버지", after: "할머니", reason: "처음 나온 값" },
+      },
+    ]);
+    const call = mockCall.mock.calls[0][0];
+    expect(call.system).toBe(FACTS_SYSTEM_PROMPT);
+    expect(call.effort).toBe("high");
+    expect(call.context).toContain("## 2장. 둘째");
+    expect(call.context).toContain("## 1장. 첫째");
   });
 });
