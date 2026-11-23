@@ -3,7 +3,13 @@
 // 설계: docs/superpowers/specs/2026-11-22-editor-cleanup-modal-titles-design.md
 
 import { splitDialogue, type DialogueSplitMode } from "@/lib/dialogueSplit";
-import { applyStructureChanges, type StructureChange } from "@/lib/claude/editing";
+import { applyChanges, applyStructureChanges, type StructureChange } from "@/lib/claude/editing";
+import {
+  applyChapterPolish,
+  type ChapterPolishChange,
+  type FactFinding,
+  type FactFix,
+} from "@/lib/claude/preprocessing";
 import type { MasterChapter } from "@/lib/masterReview";
 
 export type CleanupBase = {
@@ -64,4 +70,59 @@ export function summarizeChapter(original: MasterChapter, base: MasterChapter, a
     afterSplit: base.paragraphs.length,
     final: applyStructureChanges(base.paragraphs, accepted),
   };
+}
+
+// ── 마스터 전처리: ④ 사실관계 점검, ③ 문장 다듬기 ──
+// 한 단계의 실패가 나머지를 멈추지 않도록, 서버 액션이 { error }를 돌려주든 호출이 던지든 결과의 오류 한 줄로 남긴다.
+async function settle<T extends { error?: string }>(
+  request: () => Promise<{ error?: string } & Partial<T>>,
+  ok: (response: Partial<T>) => T | null,
+  fallback: string,
+): Promise<T | { error: string }> {
+  try {
+    const response = await request();
+    if (response.error) return { error: response.error };
+    return ok(response) ?? { error: fallback };
+  } catch (err) {
+    return { error: err instanceof Error && err.message ? err.message : fallback };
+  }
+}
+
+export type FactCheck = { findings?: FactFinding[]; error?: string };
+
+export function fetchFactCheck(request: () => Promise<{ error?: string; findings?: FactFinding[] }>): Promise<FactCheck> {
+  return settle<FactCheck>(request, (r) => (r.findings ? { findings: r.findings } : null), "사실관계 점검을 받지 못했습니다");
+}
+
+export type ChapterPolish = { changes?: ChapterPolishChange[]; received?: number; error?: string };
+
+export function fetchChapterPolish(
+  request: () => Promise<{ error?: string; changes?: ChapterPolishChange[]; received?: number }>,
+): Promise<ChapterPolish> {
+  return settle<ChapterPolish>(
+    request,
+    (r) => (r.changes ? { changes: r.changes, received: r.received ?? r.changes.length } : null),
+    "문장 다듬기를 받지 못했습니다",
+  );
+}
+
+/** 편집자가 고른 ④ 정정만 해당 문단에 적용한다. 입력은 바꾸지 않는다. */
+export function applyFactFixes(chapters: MasterChapter[], fixes: FactFix[]): MasterChapter[] {
+  return chapters.map((chapter) => ({
+    ...chapter,
+    paragraphs: chapter.paragraphs.map((paragraph, index) =>
+      applyChanges(
+        paragraph,
+        fixes.filter((f) => f.chapterNumber === chapter.chapterNumber && f.paragraphIndex === index),
+      ),
+    ),
+  }));
+}
+
+/** ③ 문장 다듬기 결과(장 번호별)를 적용한다. 오류이거나 아직 받지 못한 장은 원문 그대로다. */
+export function applyPolishes(chapters: MasterChapter[], polishes: Record<number, ChapterPolish>): MasterChapter[] {
+  return chapters.map((chapter) => {
+    const changes = polishes[chapter.chapterNumber]?.changes;
+    return { ...chapter, paragraphs: changes ? applyChapterPolish(chapter.paragraphs, changes) : [...chapter.paragraphs] };
+  });
 }

@@ -1,7 +1,16 @@
 import { describe, it, expect } from "vitest";
-import { buildCleanupBase, fetchChapterSuggestion, summarizeChapter } from "./paragraphCleanup";
+import {
+  buildCleanupBase,
+  fetchChapterSuggestion,
+  fetchFactCheck,
+  fetchChapterPolish,
+  applyFactFixes,
+  applyPolishes,
+  summarizeChapter,
+} from "./paragraphCleanup";
 import type { MasterChapter } from "./masterReview";
 import type { StructureChange } from "./claude/editing";
+import type { FactFinding, FactFix } from "./claude/preprocessing";
 
 const chapter = (chapterNumber: number, paragraphs: string[]): MasterChapter => ({
   chapterNumber,
@@ -99,5 +108,116 @@ describe("summarizeChapter", () => {
   it("제안이 없으면 final은 작업본 문단 그대로다", () => {
     const original = chapter(2, ["가", "나"]);
     expect(summarizeChapter(original, original, [])).toEqual({ chapterNumber: 2, before: 2, afterSplit: 2, final: ["가", "나"] });
+  });
+});
+
+describe("fetchFactCheck", () => {
+  const finding: FactFinding = { topic: "나이", description: "충돌", occurrences: [], fix: null };
+
+  it("정상 응답은 항목을 그대로 돌려준다(빈 배열도 정상이다)", async () => {
+    expect(await fetchFactCheck(async () => ({ findings: [finding] }))).toEqual({ findings: [finding] });
+    expect(await fetchFactCheck(async () => ({ findings: [] }))).toEqual({ findings: [] });
+  });
+
+  it("서버가 error를 돌려주면 그 문구를 쓴다", async () => {
+    expect(await fetchFactCheck(async () => ({ error: "응답이 너무 길어요" }))).toEqual({ error: "응답이 너무 길어요" });
+  });
+
+  it("error도 findings도 없으면 기본 문구를 쓴다", async () => {
+    expect(await fetchFactCheck(async () => ({}))).toEqual({ error: "사실관계 점검을 받지 못했습니다" });
+  });
+
+  it("호출이 던지면 메시지를, 문자열로 reject하면 기본 문구를 쓴다", async () => {
+    expect(
+      await fetchFactCheck(async () => {
+        throw new Error("네트워크가 끊겼어요");
+      }),
+    ).toEqual({ error: "네트워크가 끊겼어요" });
+    expect(await fetchFactCheck(() => Promise.reject("문자열 예외"))).toEqual({ error: "사실관계 점검을 받지 못했습니다" });
+  });
+});
+
+describe("fetchChapterPolish", () => {
+  const change = { paragraphIndex: 0, before: "아주 ", after: "", reason: "군더더기" };
+
+  it("정상 응답은 항목과 받은 개수를 돌려준다", async () => {
+    expect(await fetchChapterPolish(async () => ({ changes: [change], received: 2 }))).toEqual({ changes: [change], received: 2 });
+    expect(await fetchChapterPolish(async () => ({ changes: [], received: 0 }))).toEqual({ changes: [], received: 0 });
+  });
+
+  it("서버가 error를 돌려주면 그 문구를 쓴다", async () => {
+    expect(await fetchChapterPolish(async () => ({ error: "지시가 너무 깁니다" }))).toEqual({ error: "지시가 너무 깁니다" });
+  });
+
+  it("error도 changes도 없으면 기본 문구를 쓴다", async () => {
+    expect(await fetchChapterPolish(async () => ({}))).toEqual({ error: "문장 다듬기를 받지 못했습니다" });
+  });
+
+  it("호출이 던지면 메시지를, 문자열로 reject하면 기본 문구를 쓴다", async () => {
+    expect(
+      await fetchChapterPolish(async () => {
+        throw new Error("네트워크가 끊겼어요");
+      }),
+    ).toEqual({ error: "네트워크가 끊겼어요" });
+    expect(await fetchChapterPolish(() => Promise.reject("문자열 예외"))).toEqual({ error: "문장 다듬기를 받지 못했습니다" });
+  });
+});
+
+describe("applyFactFixes / applyPolishes", () => {
+  const fix = (chapterNumber: number, paragraphIndex: number, before: string, after: string): FactFix => ({
+    chapterNumber,
+    paragraphIndex,
+    before,
+    after,
+    reason: "r",
+  });
+
+  it("applyFactFixes: 고른 정정만 해당 문단에 적용하고 입력은 바꾸지 않는다", () => {
+    const input = [chapter(1, ["수진은 14살이었다.", "다른 문단"]), chapter(2, ["열여섯 살의 수진이 왔다."])];
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const out = applyFactFixes(input, [fix(2, 0, "열여섯 살", "열네 살")]);
+    expect(out).toEqual([chapter(1, ["수진은 14살이었다.", "다른 문단"]), chapter(2, ["열네 살의 수진이 왔다."])]);
+    expect(input).toEqual(snapshot);
+  });
+
+  it("applyFactFixes: 정정이 없으면 같은 내용의 복사본을 돌려준다", () => {
+    const input = [chapter(1, ["가나다"])];
+    const out = applyFactFixes(input, []);
+    expect(out).toEqual(input);
+    expect(out).not.toBe(input);
+    expect(out[0].paragraphs).not.toBe(input[0].paragraphs);
+  });
+
+  it("applyPolishes: 수신한 장만 바뀌고 오류만 있는 장과 항목이 없는 장은 그대로다", () => {
+    const input = [
+      chapter(1, ["그녀는 아주 조용히 걸었다."]),
+      chapter(2, ["그녀는 아주 조용히 걸었다."]),
+      chapter(3, ["그녀는 아주 조용히 걸었다."]),
+      chapter(4, ["그녀는 아주 조용히 걸었다."]),
+    ];
+    const out = applyPolishes(input, {
+      1: { changes: [{ paragraphIndex: 0, before: "아주 ", after: "", reason: "r" }], received: 1 },
+      2: { error: "실패" },
+      3: { changes: [], received: 0 },
+    });
+    expect(out[0].paragraphs).toEqual(["그녀는 조용히 걸었다."]);
+    expect(out[1]).toEqual(input[1]);
+    expect(out[2]).toEqual(input[2]);
+    expect(out[3]).toEqual(input[3]);
+    expect(input[0].paragraphs).toEqual(["그녀는 아주 조용히 걸었다."]);
+  });
+
+  it("통합: ④ 정정이 반영된 글에서 ③이 돌고, 그 결과에 대사 나누기가 적용된다", () => {
+    const input = [
+      chapter(1, ["그녀는 아주 조용히 걸었다. “가자.” 수진은 14살이었다."]),
+      chapter(2, ["열여섯 살의 수진이 왔다."]),
+    ];
+    const afterFacts = applyFactFixes(input, [fix(2, 0, "열여섯 살", "열네 살")]);
+    const polished = applyPolishes(afterFacts, {
+      1: { changes: [{ paragraphIndex: 0, before: "아주 ", after: "", reason: "r" }], received: 1 },
+    });
+    const base = buildCleanupBase(polished, "separate");
+    expect(base.chapters[0].paragraphs).toEqual(["그녀는 조용히 걸었다.", "“가자.”", "수진은 14살이었다."]);
+    expect(base.chapters[1].paragraphs).toEqual(["열네 살의 수진이 왔다."]);
   });
 });
