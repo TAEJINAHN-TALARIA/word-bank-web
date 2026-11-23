@@ -44,3 +44,20 @@ export const preReviewSchema = z.object({
     }),
   ),
 });
+
+export const factsSchema = z.object({
+  findings: z.array(
+    z.object({
+      topic: z.string(),
+      description: z.string(),
+      occurrences: z.array(z.object({ chapterNumber: z.number().int(), paragraphNumber: z.number().int(), quote: z.string() })),
+      fix: z.object({
+        chapterNumber: z.number().int(),
+        paragraphNumber: z.number().int(),
+        before: z.string(),
+        after: z.string(),
+        reason: z.string(),
+      }),
+    }),
+  ),
+});

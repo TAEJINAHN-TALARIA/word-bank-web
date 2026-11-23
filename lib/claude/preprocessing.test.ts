@@ -6,8 +6,14 @@ import {
   validateChapterPolish,
   applyChapterPolish,
   type RawChapterPolishChange,
+  MAX_FACT_FINDINGS,
+  FACTS_SYSTEM_PROMPT,
+  buildFactsTask,
+  validateFactFindings,
+  type RawFactFinding,
 } from "./preprocessing";
 import { DATA_NOTICE } from "./editing";
+import type { MasterChapter } from "@/lib/masterReview";
 
 const P = ["그녀는 아주아주 매우 조용하고 차분하게 문을 천천히 열었다.", "수진은 14살이었다. 그는 “가자.” 하고 말했다."];
 
@@ -142,5 +148,130 @@ describe("③ 문장 다듬기", () => {
       expect(changes).toHaveLength(2);
       expect(applyChapterPolish(paragraphs, changes)).toEqual(["그녀는 조용하게 문을 열었다."]);
     });
+  });
+});
+
+describe("④ 사실관계 점검", () => {
+  const chapters: MasterChapter[] = [
+    { chapterNumber: 1, chapterTitle: "첫째", paragraphs: ["수진은 14살이었다."] },
+    { chapterNumber: 2, chapterTitle: "둘째", paragraphs: ["열여섯 살의 수진이 왔다.", "“저 열네 살이에요.” 하고 수진이 말했다.", "그는 14살 14살 이라고 했다."] },
+  ];
+
+  const finding: RawFactFinding = {
+    topic: "수진의 나이",
+    description: "1장에서는 14살인데 2장에서는 열여섯 살이다.",
+    occurrences: [
+      { chapterNumber: 1, paragraphNumber: 1, quote: "14살" },
+      { chapterNumber: 2, paragraphNumber: 1, quote: "열여섯 살" },
+    ],
+    fix: { chapterNumber: 2, paragraphNumber: 1, before: "열여섯 살", after: "열네 살", reason: "처음 나온 값에 맞춰요" },
+  };
+
+  it("시스템 프롬프트에 핵심 규칙이 들어 있다", () => {
+    expect(FACTS_SYSTEM_PROMPT).toContain(DATA_NOTICE);
+    expect(FACTS_SYSTEM_PROMPT).toContain(`최대 ${MAX_FACT_FINDINGS}건`);
+    expect(FACTS_SYSTEM_PROMPT).toContain("최대 8건");
+    expect(FACTS_SYSTEM_PROMPT).toContain("처음 나온 값");
+  });
+
+  it("요청문이 항목 모양을 설명한다", () => {
+    const task = buildFactsTask();
+    for (const key of ["topic", "description", "occurrences", "fix"]) expect(task).toContain(key);
+  });
+
+  it("정상 항목은 문단 번호가 0부터의 인덱스로 바뀌고 fix가 남는다", () => {
+    expect(validateFactFindings([finding], chapters)).toEqual([
+      {
+        topic: "수진의 나이",
+        description: finding.description,
+        occurrences: [
+          { chapterNumber: 1, paragraphIndex: 0, quote: "14살" },
+          { chapterNumber: 2, paragraphIndex: 0, quote: "열여섯 살" },
+        ],
+        fix: { chapterNumber: 2, paragraphIndex: 0, before: "열여섯 살", after: "열네 살", reason: "처음 나온 값에 맞춰요" },
+      },
+    ]);
+  });
+
+  it("문단에 없는 quote는 그 occurrence만 뺀다", () => {
+    const raw = { ...finding, occurrences: [finding.occurrences[0], { chapterNumber: 2, paragraphNumber: 1, quote: "없는 구절" }] };
+    const [out] = validateFactFindings([raw], chapters);
+    expect(out.occurrences).toEqual([{ chapterNumber: 1, paragraphIndex: 0, quote: "14살" }]);
+    expect(out.fix).not.toBeNull();
+  });
+
+  it("없는 장/문단을 가리키는 occurrence도 뺀다", () => {
+    const raw = { ...finding, occurrences: [finding.occurrences[0], { chapterNumber: 9, paragraphNumber: 1, quote: "14살" }, { chapterNumber: 1, paragraphNumber: 5, quote: "14살" }] };
+    expect(validateFactFindings([raw], chapters)[0].occurrences).toHaveLength(1);
+  });
+
+  it("모든 occurrence가 빠지고 fix도 없으면 항목이 사라진다", () => {
+    const raw: RawFactFinding = {
+      ...finding,
+      occurrences: [{ chapterNumber: 1, paragraphNumber: 1, quote: "없는 구절" }],
+      fix: { ...finding.fix, before: "" },
+    };
+    expect(validateFactFindings([raw], chapters)).toEqual([]);
+  });
+
+  it("occurrence가 모두 빠져도 fix가 남으면 항목은 남는다", () => {
+    const raw = { ...finding, occurrences: [{ chapterNumber: 1, paragraphNumber: 1, quote: "없는 구절" }] };
+    const [out] = validateFactFindings([raw], chapters);
+    expect(out.occurrences).toEqual([]);
+    expect(out.fix).not.toBeNull();
+  });
+
+  const badFixes: [string, RawFactFinding["fix"]][] = [
+    ["없는 장", { ...finding.fix, chapterNumber: 9 }],
+    ["없는 문단", { ...finding.fix, paragraphNumber: 7 }],
+    ["문단에 없는 before", { ...finding.fix, before: "존재하지 않는 구절" }],
+    ["문단에 두 번 나오는 before", { chapterNumber: 2, paragraphNumber: 3, before: "14살", after: "열네 살", reason: "r" }],
+    ["before와 after가 같음", { ...finding.fix, after: finding.fix.before }],
+    ["after에 빈 줄", { ...finding.fix, after: "열네 살\n\n이다" }],
+    ["before가 빈 문자열", { ...finding.fix, before: "" }],
+    ["after에서 따옴표를 뺌", { chapterNumber: 2, paragraphNumber: 2, before: "열네 살이에요.”", after: "열네 살이에요.", reason: "r" }],
+    ["after에 따옴표를 더함", { ...finding.fix, after: "“열네 살”" }],
+    ["따옴표 종류가 바뀜", { chapterNumber: 2, paragraphNumber: 2, before: "“저", after: "\"저", reason: "r" }],
+  ];
+
+  it.each(badFixes)("fix를 null로 만든다: %s", (_name, fix) => {
+    const [out] = validateFactFindings([{ ...finding, fix }], chapters);
+    expect(out.fix).toBeNull();
+    expect(out.occurrences.length).toBeGreaterThan(0);
+  });
+
+  it("대사 안쪽 정정은 따옴표 글자가 같으면 남는다", () => {
+    const fix = { chapterNumber: 2, paragraphNumber: 2, before: "열네 살이에요", after: "열여섯 살이에요", reason: "r" };
+    const [out] = validateFactFindings([{ ...finding, fix }], chapters);
+    expect(out.fix).toEqual({ chapterNumber: 2, paragraphIndex: 1, before: fix.before, after: fix.after, reason: "r" });
+  });
+
+  it("앞선 fix와 겹치는 뒤 항목의 fix는 null이 되고 앞 항목은 유지된다", () => {
+    const second: RawFactFinding = {
+      ...finding,
+      topic: "다른 주제",
+      fix: { chapterNumber: 2, paragraphNumber: 1, before: "여섯 살의", after: "네 살의", reason: "r" },
+    };
+    const [a, b] = validateFactFindings([finding, second], chapters);
+    expect(a.fix).not.toBeNull();
+    expect(b.fix).toBeNull();
+  });
+
+  it("겹치지 않는 같은 문단의 fix는 둘 다 남는다", () => {
+    const second: RawFactFinding = {
+      ...finding,
+      topic: "다른 주제",
+      fix: { chapterNumber: 2, paragraphNumber: 1, before: "수진이 왔다", after: "수진이 갔다", reason: "r" },
+    };
+    const [a, b] = validateFactFindings([finding, second], chapters);
+    expect(a.fix).not.toBeNull();
+    expect(b.fix).not.toBeNull();
+  });
+
+  it("9건을 주면 8건만 돌려준다", () => {
+    const nine = Array.from({ length: 9 }, (_, i) => ({ ...finding, topic: `주제${i}`, fix: { ...finding.fix, before: "" } }));
+    const out = validateFactFindings(nine, chapters);
+    expect(out).toHaveLength(MAX_FACT_FINDINGS);
+    expect(out.map((f) => f.topic)).toEqual(nine.slice(0, 8).map((f) => f.topic));
   });
 });

@@ -3,6 +3,7 @@
 // 설계: docs/superpowers/specs/2026-11-23-master-preprocess-design.md ③
 import { quotedRanges } from "@/lib/dialogueSplit";
 import { DATA_NOTICE, INTRO, JSON_ONLY, KEEP_STYLE, applyChanges, validateChanges, type PolishChange } from "./editing";
+import type { MasterChapter } from "@/lib/masterReview";
 
 export const MAX_CHAPTER_POLISH_CHANGES = 20;
 
@@ -82,4 +83,83 @@ export function applyChapterPolish(paragraphs: string[], changes: ChapterPolishC
       changes.filter((c) => c.paragraphIndex === index),
     ),
   );
+}
+
+// ── ④ 사실관계 점검 ─────────────────────────────────────────────────────────────────────────────
+// 글에 적힌 사실끼리 충돌하는 곳만 찾는다(정답 기준값은 없다). 원고 전체를 한 번에 보고, 정정은 편집자가 고른 것만 적용한다.
+export const MAX_FACT_FINDINGS = 8;
+
+export const FACTS_SYSTEM_PROMPT = `${INTRO} 지금은 소설 전체에서 사실 관계가 서로 충돌하는 곳을 찾는 편집자입니다.
+
+점검 원칙:
+- 같은 인물의 나이·직업·관계·외모, 장소, 시간(계절·요일·날짜), 사물의 수·색처럼 글에 적힌 사실이 서로 충돌하는 곳만 찾으세요. 글에 적히지 않은 설정을 추측해서 지적하지 마세요.
+- 확실한 것만 최대 ${MAX_FACT_FINDINGS}건 돌려주세요. 해석이 갈리는 연출, 복선, 인물의 오해, 거짓말하는 인물의 대사는 모순으로 보지 마세요. 충돌이 없으면 findings를 빈 배열로 돌려주세요.
+- 항목마다 topic(예: "수진의 나이"), description(한 문장), occurrences(충돌하는 위치 전부: chapterNumber, paragraphNumber, quote), fix(정정 제안)를 쓰세요. quote는 그 문단에 있는 구절을 글자 하나 다르지 않게 그대로 옮기세요.
+- fix는 한 곳만 고치세요. 가능하면 처음 나온 값을 기준으로 뒤를 맞추고, 글의 흐름이 다른 쪽을 가리키면 그쪽에 맞추세요. 숫자나 단어 하나 수준으로 최소한만 바꾸고, before는 그 문단에 한 번만 나오는 구절을 그대로 옮기세요. 따옴표는 더하거나 빼거나 옮기지 마세요.
+- 어느 쪽이 맞는지 알 수 없으면 fix.before를 빈 문자열로 두세요.
+- 줄거리, 인물, 시점, 문체는 바꾸지 마세요.
+${DATA_NOTICE}
+${JSON_ONLY}`;
+
+export function buildFactsTask(): string {
+  return `[요청]
+대상: 소설 전체
+[소설 본문] 전체에서 사실 관계가 서로 충돌하는 곳을 findings로 돌려주세요. 항목마다 topic(주제), description(한 문장 설명), occurrences(충돌하는 위치마다 chapterNumber, paragraphNumber, quote), fix(chapterNumber, paragraphNumber, before, after, reason)를 쓰세요. 정정 제안을 하지 않으려면 fix.before를 빈 문자열로 쓰세요.`;
+}
+
+export type RawFactFinding = {
+  topic: string;
+  description: string;
+  occurrences: { chapterNumber: number; paragraphNumber: number; quote: string }[];
+  fix: { chapterNumber: number; paragraphNumber: number; before: string; after: string; reason: string }; // before === "" 이면 정정 제안 없음
+};
+export type FactOccurrence = { chapterNumber: number; paragraphIndex: number; quote: string };
+export type FactFix = { chapterNumber: number; paragraphIndex: number; before: string; after: string; reason: string };
+export type FactFinding = { topic: string; description: string; occurrences: FactOccurrence[]; fix: FactFix | null };
+
+// ①이 따옴표 짝으로 대사를 나누므로, 정정이 따옴표 글자를 더하거나 빼거나 옮기면 짝이 깨진다.
+function sameQuoteChars(before: string, after: string): boolean {
+  return (["“", "”", '"'] as const).every((q) => before.split(q).length === after.split(q).length);
+}
+
+/**
+ * 사실관계 점검 결과 검증. 위치(장·문단)가 없거나 quote가 그 문단에 없는 occurrence는 위치 표시에서만 뺀다.
+ * fix는 before가 문단에 정확히 한 번 있고, 아무 것도 안 바꾸거나 빈 줄을 더하거나 따옴표 글자를 바꾸지 않고,
+ * 앞서 채택한 fix와 겹치지 않을 때만 남긴다. 못 쓰게 된 fix는 null로 두고 항목(발견)은 남긴다. 항목은 앞에서부터 8건에서 자른다.
+ */
+export function validateFactFindings(raw: RawFactFinding[], chapters: MasterChapter[]): FactFinding[] {
+  const claimed = new Map<string, [number, number][]>();
+  const out: FactFinding[] = [];
+
+  for (const r of raw) {
+    if (out.length === MAX_FACT_FINDINGS) break;
+
+    const occurrences: FactOccurrence[] = [];
+    for (const o of r.occurrences) {
+      const paragraph = chapters.find((c) => c.chapterNumber === o.chapterNumber)?.paragraphs[o.paragraphNumber - 1];
+      if (paragraph === undefined || !o.quote || !paragraph.includes(o.quote)) continue;
+      occurrences.push({ chapterNumber: o.chapterNumber, paragraphIndex: o.paragraphNumber - 1, quote: o.quote });
+    }
+
+    let fix: FactFix | null = null;
+    let span: { key: string; range: [number, number] } | null = null;
+    const f = r.fix;
+    const paragraph = chapters.find((c) => c.chapterNumber === f.chapterNumber)?.paragraphs[f.paragraphNumber - 1];
+    if (paragraph !== undefined && f.before && f.before !== f.after && !/\n\s*\n/.test(f.after) && sameQuoteChars(f.before, f.after)) {
+      const start = paragraph.indexOf(f.before);
+      if (start >= 0 && paragraph.indexOf(f.before, start + 1) < 0) {
+        const range: [number, number] = [start, start + f.before.length];
+        const key = `${f.chapterNumber}:${f.paragraphNumber - 1}`;
+        if (!(claimed.get(key) ?? []).some(([s, e]) => range[0] < e && s < range[1])) {
+          fix = { chapterNumber: f.chapterNumber, paragraphIndex: f.paragraphNumber - 1, before: f.before, after: f.after, reason: f.reason.trim() };
+          span = { key, range };
+        }
+      }
+    }
+
+    if (occurrences.length === 0 && !fix) continue;
+    if (span) claimed.set(span.key, [...(claimed.get(span.key) ?? []), span.range]);
+    out.push({ topic: r.topic, description: r.description, occurrences, fix });
+  }
+  return out;
 }
