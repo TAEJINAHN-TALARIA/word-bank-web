@@ -17,6 +17,8 @@ import {
   polishParagraphAction,
   polishChapterAction,
   checkFactsAction,
+  checkDialogueAction,
+  checkStyleAction,
   reviewStoryAction,
   ensurePreReviewAction,
   evaluateMasterAction,
@@ -59,6 +61,8 @@ describe("관리자 세션 재확인", () => {
     expect(await suggestStructureAction({ mode: "review", id: "s1", chapters, chapterNumber: 1 })).toEqual(expected);
     expect(await polishChapterAction({ mode: "review", id: "s1", chapters, chapterNumber: 1 })).toEqual(expected);
     expect(await checkFactsAction({ mode: "review", id: "s1", chapters })).toEqual(expected);
+    expect(await checkDialogueAction({ mode: "review", id: "s1", chapters })).toEqual(expected);
+    expect(await checkStyleAction({ mode: "review", id: "s1", chapters })).toEqual(expected);
     expect(await reviewStoryAction({ mode: "review", id: "s1", chapters, kind: "flow" })).toEqual(expected);
     expect(await ensurePreReviewAction("s1")).toEqual(expected);
     expect(await evaluateMasterAction({ sessionId: "s1", chapters })).toEqual(expected);
@@ -70,6 +74,8 @@ describe("관리자 세션 재확인", () => {
     expect(editor.polishParagraph).not.toHaveBeenCalled();
     expect(editor.polishChapter).not.toHaveBeenCalled();
     expect(editor.checkFacts).not.toHaveBeenCalled();
+    expect(editor.checkDialogue).not.toHaveBeenCalled();
+    expect(editor.checkStyle).not.toHaveBeenCalled();
   });
 });
 
@@ -381,5 +387,40 @@ describe("마스터 전처리 액션", () => {
     expect(await checkFactsAction({ mode: "review", id: "s1", chapters })).toEqual({ error: "응답이 너무 길어요" });
     vi.mocked(editor.checkFacts).mockRejectedValueOnce("boom");
     expect(await checkFactsAction({ mode: "review", id: "s1", chapters })).toEqual({ error: "사실관계 점검 실패" });
+  });
+});
+
+describe.each([
+  ["checkDialogueAction", checkDialogueAction, "checkDialogue" as const, "대사 구어체 점검 실패"],
+  ["checkStyleAction", checkStyleAction, "checkStyle" as const, "서술 문체 점검 실패"],
+])("%s", (_name, action, editorFn, fallback) => {
+  it("서버에서 설정집을 읽어 현재 본문 전체와 함께 AI에 넘기고 항목을 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(detail());
+    const findings = [{ topic: "t", description: "d", occurrences: [{ chapterNumber: 1, paragraphIndex: 0, quote: "하린" }], fix: null }];
+    vi.mocked(editor[editorFn]).mockResolvedValueOnce(findings);
+
+    expect(await action({ mode: "review", id: "s1", chapters })).toEqual({ findings });
+    expect(editor[editorFn]).toHaveBeenCalledWith(
+      expect.objectContaining({ chapters, characters: detail().characters, narrativeStyle: "-했다체", level: "Lv3" }),
+    );
+  });
+
+  it("게시된 소설이면 AI를 부르지 않고 거절한다", async () => {
+    expect(await action({ mode: "published", id: "d1", chapters })).toEqual({ error: "게시된 소설은 마스터 전처리를 할 수 없습니다" });
+    expect(editor[editorFn]).not.toHaveBeenCalled();
+  });
+
+  it("설정집을 읽지 못하면 그 오류를 그대로 돌려주고 AI를 부르지 않는다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValueOnce(null);
+    expect(await action({ mode: "review", id: "s1", chapters })).toEqual({ error: "소설을 찾을 수 없습니다" });
+    expect(editor[editorFn]).not.toHaveBeenCalled();
+  });
+
+  it("던지면 오류 메시지를, Error가 아닌 값이면 기본 문구를 돌려준다", async () => {
+    vi.mocked(reviews.getMasterReview).mockResolvedValue(detail());
+    vi.mocked(editor[editorFn]).mockRejectedValueOnce(new Error("응답이 너무 길어요"));
+    expect(await action({ mode: "review", id: "s1", chapters })).toEqual({ error: "응답이 너무 길어요" });
+    vi.mocked(editor[editorFn]).mockRejectedValueOnce("boom");
+    expect(await action({ mode: "review", id: "s1", chapters })).toEqual({ error: fallback });
   });
 });

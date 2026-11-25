@@ -21,6 +21,8 @@ import {
   suggestStructure,
   polishChapter,
   checkFacts,
+  checkDialogue,
+  checkStyle,
   reviewStory,
   generatePreReview,
   type StoryReviewResult,
@@ -222,7 +224,7 @@ export async function suggestStructureAction(
   }
 }
 
-// 마스터 전처리(③ 문장 다듬기, ④ 사실관계 점검). 문장과 사실을 고치는 제안이라 게시된 소설(표현 수정만 허용)에서는 받지 않는다.
+// 마스터 전처리(③ 문장 다듬기, ④ 사실관계·⑤ 대사 구어체·⑥ 서술 문체 점검). 문장과 사실을 고치는 제안이라 게시된 소설(표현 수정만 허용)에서는 받지 않는다.
 const PREPROCESS_PUBLISHED_ERROR = "게시된 소설은 마스터 전처리를 할 수 없습니다";
 
 export async function polishChapterAction(
@@ -250,6 +252,30 @@ export async function checkFactsAction(input: ClaudeTarget): Promise<{ error?: s
     return { findings: await checkFacts(context) };
   } catch (err) {
     return { error: messageOf(err, "사실관계 점검 실패") };
+  }
+}
+
+export async function checkDialogueAction(input: ClaudeTarget): Promise<{ error?: string; findings?: FactFinding[] }> {
+  if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  if (input.mode !== "review") return { error: PREPROCESS_PUBLISHED_ERROR };
+  try {
+    const context = await loadEditorContext(input);
+    if ("error" in context) return context;
+    return { findings: await checkDialogue(context) };
+  } catch (err) {
+    return { error: messageOf(err, "대사 구어체 점검 실패") };
+  }
+}
+
+export async function checkStyleAction(input: ClaudeTarget): Promise<{ error?: string; findings?: FactFinding[] }> {
+  if (!(await getAdminSession())) return LOGIN_REQUIRED;
+  if (input.mode !== "review") return { error: PREPROCESS_PUBLISHED_ERROR };
+  try {
+    const context = await loadEditorContext(input);
+    if ("error" in context) return context;
+    return { findings: await checkStyle(context) };
+  } catch (err) {
+    return { error: messageOf(err, "서술 문체 점검 실패") };
   }
 }
 
