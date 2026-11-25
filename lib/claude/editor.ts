@@ -24,12 +24,17 @@ import {
   type StructureChange,
 } from "./editing";
 import {
+  DIALOGUE_CHECK_SYSTEM_PROMPT,
   FACTS_SYSTEM_PROMPT,
+  STYLE_CHECK_SYSTEM_PROMPT,
   buildChapterPolishSystemPrompt,
   buildChapterPolishTask,
+  buildDialogueCheckTask,
   buildFactsTask,
+  buildStyleCheckTask,
   findLongSentences,
   validateChapterPolish,
+  validateCheckFindings,
   validateFactFindings,
   type ChapterPolishResult,
   type FactFinding,
@@ -181,4 +186,30 @@ export async function checkFacts(input: EditorContextInput): Promise<FactFinding
     task: buildFactsTask(),
   });
   return validateFactFindings(raw.findings, input.chapters);
+}
+
+// 전처리 ⑤ 대사 구어체 점검 — 대사는 인물이 장을 가로질러 말하므로 원고 전체를 한 번에 읽는다. effort를 ④와 같게 둬 본문 캐시를 같이 쓴다.
+export async function checkDialogue(input: EditorContextInput): Promise<FactFinding[]> {
+  const raw = await callStructured({
+    label: "checkDialogue",
+    schema: factsSchema,
+    effort: "high",
+    system: DIALOGUE_CHECK_SYSTEM_PROMPT,
+    context: buildStoryContext(input),
+    task: buildDialogueCheckTask(),
+  });
+  return validateCheckFindings(raw.findings, input.chapters);
+}
+
+// 전처리 ⑥ 서술 문체 점검 — 장 사이 어조 변화는 원고 전체를 봐야 보인다.
+export async function checkStyle(input: EditorContextInput): Promise<FactFinding[]> {
+  const raw = await callStructured({
+    label: "checkStyle",
+    schema: factsSchema,
+    effort: "high",
+    system: STYLE_CHECK_SYSTEM_PROMPT,
+    context: buildStoryContext(input),
+    task: buildStyleCheckTask(),
+  });
+  return validateCheckFindings(raw.findings, input.chapters);
 }

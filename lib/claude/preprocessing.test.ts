@@ -9,11 +9,16 @@ import {
   type RawChapterPolishChange,
   MAX_FACT_FINDINGS,
   FACTS_SYSTEM_PROMPT,
+  DIALOGUE_CHECK_SYSTEM_PROMPT,
+  STYLE_CHECK_SYSTEM_PROMPT,
   buildFactsTask,
+  buildDialogueCheckTask,
+  buildStyleCheckTask,
   validateFactFindings,
+  validateCheckFindings,
   type RawFactFinding,
 } from "./preprocessing";
-import { DATA_NOTICE } from "./editing";
+import { DATA_NOTICE, SPOKEN_DIALOGUE } from "./editing";
 import { levelRubric } from "./levelRubric";
 import type { MasterChapter } from "@/lib/masterReview";
 
@@ -342,5 +347,141 @@ describe("④ 사실관계 점검", () => {
     const out = validateFactFindings(nine, chapters);
     expect(out).toHaveLength(MAX_FACT_FINDINGS);
     expect(out.map((f) => f.topic)).toEqual(nine.slice(0, 8).map((f) => f.topic));
+  });
+});
+
+describe("⑤ 대사 구어체 · ⑥ 서술 문체 점검", () => {
+  const chapters: MasterChapter[] = [
+    { chapterNumber: 1, chapterTitle: "첫째", paragraphs: ["그는 “본인은 귀하의 방문을 환영하는 바입니다.” 하고 말했다.", "수진은 14살이었다."] },
+    { chapterNumber: 2, chapterTitle: "둘째", paragraphs: ["“그 건에 대해서는 추후 연락드리겠습니다.” 한민우가 말했다."] },
+  ];
+  const raw = (fix: Partial<RawFactFinding["fix"]> = {}, rest: Partial<RawFactFinding> = {}): RawFactFinding => ({
+    topic: "한민우의 공문식 대사",
+    description: "공문처럼 딱딱한 대사예요.",
+    occurrences: [{ chapterNumber: 1, paragraphNumber: 1, quote: "본인은 귀하의 방문을 환영하는 바입니다." }],
+    fix: {
+      chapterNumber: 1,
+      paragraphNumber: 1,
+      before: "본인은 귀하의 방문을 환영하는 바입니다.",
+      after: "어서 와요, 잘 오셨어요.",
+      reason: "입말로",
+    },
+    ...rest,
+    ...(Object.keys(fix).length ? { fix: { ...raw().fix, ...fix } } : {}),
+  });
+
+  describe("프롬프트", () => {
+    it("⑤: 따옴표 안의 대사만, 입말로만 바꾸고 말투·내용·숫자는 유지, 확실한 것만 최대 8건, 대사 안쪽 구절로 정정", () => {
+      const p = DIALOGUE_CHECK_SYSTEM_PROMPT;
+      expect(p).toContain(DATA_NOTICE);
+      expect(p).toContain(SPOKEN_DIALOGUE);
+      expect(p).toContain("따옴표 안의 대사");
+      expect(p).toContain("인물 말투");
+      expect(p).toContain("입말로만");
+      expect(p).toContain("숫자");
+      expect(p).toContain("확실한 것만 최대 8건");
+      expect(p).toContain("따옴표 글자");
+      expect(p).toContain("fix.before");
+    });
+
+    it("⑥: [설정]의 서술 문체 기준, 종결어미 급변·시점 이탈·장 사이 어조·수식 밀도, 최대 8건, 분명할 때만 정정", () => {
+      const p = STYLE_CHECK_SYSTEM_PROMPT;
+      expect(p).toContain(DATA_NOTICE);
+      expect(p).toContain("[설정]");
+      expect(p).toContain("서술 문체");
+      expect(p).toContain("종결어미");
+      expect(p).toContain("시점");
+      expect(p).toContain("장 사이");
+      expect(p).toContain("수식");
+      expect(p).toContain("확실한 것만 최대 8건");
+      expect(p).toContain("분명할 때만");
+      expect(p).toContain("fix.before");
+      expect(p).not.toContain(SPOKEN_DIALOGUE); // 대사는 ⑤의 일이다
+    });
+
+    it("요청문이 항목 모양을 설명한다", () => {
+      for (const task of [buildDialogueCheckTask(), buildStyleCheckTask()]) {
+        for (const key of ["topic", "description", "occurrences", "fix"]) expect(task).toContain(key);
+      }
+    });
+  });
+
+  describe("validateCheckFindings", () => {
+    it("정상 항목은 위치가 0부터의 인덱스로 바뀌고 fix가 남는다", () => {
+      const [out] = validateCheckFindings([raw()], chapters);
+      expect(out.occurrences).toEqual([{ chapterNumber: 1, paragraphIndex: 0, quote: "본인은 귀하의 방문을 환영하는 바입니다." }]);
+      expect(out.fix).toEqual({
+        chapterNumber: 1,
+        paragraphIndex: 0,
+        before: "본인은 귀하의 방문을 환영하는 바입니다.",
+        after: "어서 와요, 잘 오셨어요.",
+        reason: "입말로",
+      });
+    });
+
+    it("숫자가 사라지는 fix는 null이 되고 항목은 남는다", () => {
+      const items = validateCheckFindings(
+        [raw({ paragraphNumber: 2, before: "수진은 14살이었다.", after: "수진은 열네 살이었다." }, { occurrences: [{ chapterNumber: 1, paragraphNumber: 2, quote: "14살" }] })],
+        chapters,
+      );
+      expect(items).toHaveLength(1);
+      expect(items[0].fix).toBeNull();
+      expect(items[0].occurrences).toHaveLength(1);
+    });
+
+    it("숫자가 그대로 있으면 fix가 남는다", () => {
+      const [out] = validateCheckFindings([raw({ paragraphNumber: 2, before: "수진은 14살이었다.", after: "수진은 14살이야." })], chapters);
+      expect(out.fix?.after).toBe("수진은 14살이야.");
+    });
+
+    it("숫자 때문에 버려진 fix는 자리를 차지하지 않아 뒤 항목의 겹치는 fix가 남는다", () => {
+      const lostDigits = raw({ paragraphNumber: 2, before: "수진은 14살이었다.", after: "수진은 열네 살이었다." });
+      const next = raw({ paragraphNumber: 2, before: "14살이었다.", after: "14살이야." }, { topic: "다음" });
+      const [, second] = validateCheckFindings([lostDigits, next], chapters);
+      expect(second.fix).not.toBeNull();
+    });
+
+    it("따옴표 글자가 달라지는 fix는 null이 된다", () => {
+      for (const after of ["“어서 와요.”", "”어서 와요", '어서 "와요']) {
+        const [out] = validateCheckFindings([raw({ after })], chapters);
+        expect(out.fix).toBeNull();
+        expect(out.occurrences).toHaveLength(1);
+      }
+    });
+
+    it("before가 문단에 두 번 나오면 fix는 null이 된다", () => {
+      const twice: MasterChapter[] = [{ chapterNumber: 1, chapterTitle: "첫째", paragraphs: ["“응.” 그가 말했다. “응.” 그가 웃었다."] }];
+      const [out] = validateCheckFindings(
+        [raw({ before: "응.", after: "그래." }, { occurrences: [{ chapterNumber: 1, paragraphNumber: 1, quote: "응." }] })],
+        twice,
+      );
+      expect(out.fix).toBeNull();
+    });
+
+    it("위치를 못 찾는 occurrence는 위치에서만 빠진다", () => {
+      const [out] = validateCheckFindings(
+        [raw({}, { occurrences: [{ chapterNumber: 1, paragraphNumber: 1, quote: "없는 구절" }, { chapterNumber: 9, paragraphNumber: 1, quote: "x" }] })],
+        chapters,
+      );
+      expect(out.occurrences).toEqual([]);
+      expect(out.fix).not.toBeNull();
+    });
+
+    it("빈 fix.before는 정정 제안 없음이고, 위치가 있으면 항목은 남는다", () => {
+      const [out] = validateCheckFindings([raw({ before: "", after: "" })], chapters);
+      expect(out.fix).toBeNull();
+      expect(out.occurrences).toHaveLength(1);
+    });
+
+    it("위치도 fix도 없는 항목은 사라진다", () => {
+      expect(validateCheckFindings([raw({ before: "", after: "" }, { occurrences: [] })], chapters)).toEqual([]);
+    });
+
+    it("9건을 주면 8건에서 자른다", () => {
+      const nine = Array.from({ length: 9 }, (_, i) => raw({ before: "", after: "" }, { topic: `주제${i}` }));
+      const out = validateCheckFindings(nine, chapters);
+      expect(out).toHaveLength(8);
+      expect(out.map((f) => f.topic)).toEqual(nine.slice(0, 8).map((f) => f.topic));
+    });
   });
 });

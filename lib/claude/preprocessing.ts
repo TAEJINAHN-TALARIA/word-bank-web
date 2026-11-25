@@ -2,7 +2,7 @@
 // "server-only"를 import하지 않으므로 클라이언트 컴포넌트에서 바로 쓴다.
 // 설계: docs/superpowers/specs/2026-11-23-master-preprocess-design.md ③
 import { quotedRanges } from "@/lib/dialogueSplit";
-import { DATA_NOTICE, INTRO, JSON_ONLY, KEEP_STYLE, applyChanges, validateChanges, type PolishChange } from "./editing";
+import { DATA_NOTICE, INTRO, JSON_ONLY, KEEP_STYLE, SPOKEN_DIALOGUE, applyChanges, validateChanges, type PolishChange } from "./editing";
 import type { MasterChapter } from "@/lib/masterReview";
 import { levelRubric } from "./levelRubric";
 
@@ -201,4 +201,57 @@ export function validateFactFindings(raw: RawFactFinding[], chapters: MasterChap
     out.push({ topic: r.topic, description: r.description, occurrences, fix });
   }
   return out;
+}
+
+// ── ⑤ 대사 구어체 · ⑥ 서술 문체 점검 ─────────────────────────────────────────────────────────────
+// ④와 같은 모양(FactFinding)의 점검형 단계다. 원고 전체를 한 번에 보고, 정정은 편집자가 고른 것만 적용한다.
+// 같은 구절을 ④⑤⑥ 둘 이상이 고치자고 할 수 있어서, 적용할 때 겹치면 뒤의 것을 건너뛴다(paragraphCleanup.applyCheckFixes).
+const FINDING_SHAPE =
+  "항목마다 topic(주제), description(한 문장 설명), occurrences(해당 위치마다 chapterNumber, paragraphNumber, quote), fix(정정 제안)를 쓰세요. quote는 그 문단에 있는 구절을 글자 하나 다르지 않게 그대로 옮기세요.";
+
+export const DIALOGUE_CHECK_SYSTEM_PROMPT = `${INTRO} 지금은 소설 전체의 대사가 실제로 입으로 하는 말처럼 들리는지 점검하는 편집자입니다.
+
+점검 원칙:
+${SPOKEN_DIALOGUE}
+- 따옴표 안의 대사만 보세요. 공문·문어체·번역투처럼 읽히는 대사(예: "~하는 바입니다", "~에 대해서는 추후 연락드리겠습니다")를 찾으세요. 인물 말투([설정]의 인물 말투)는 입말로만 바꾸고 그대로 유지하세요. 격식체 인물은 격식을 유지한 채 입말로, 사투리·반말도 그 인물의 것을 지키세요.
+- 확실한 것만 최대 ${MAX_FACT_FINDINGS}건 돌려주세요. 입말로 자연스러운 대사, 인물 설정상 일부러 딱딱한 대사는 지적하지 마세요. 문제가 없으면 findings를 빈 배열로 돌려주세요.
+- ${FINDING_SHAPE} 항목 하나는 대사 한 곳입니다.
+- fix는 그 대사의 입말 대안 하나입니다. 대사의 뜻·내용·사실·숫자는 바꾸지 마세요. fix.before와 fix.after는 따옴표 글자(“ ” ")를 넣지 말고 대사 안쪽 구절만 쓰고, before는 그 문단에 한 번만 나오는 구절을 그대로 옮기세요.
+- 어떻게 고칠지 확실하지 않으면 fix.before를 빈 문자열로 두세요.
+- 서술 문장(따옴표 밖), 줄거리, 인물, 시점은 건드리지 마세요.
+${DATA_NOTICE}
+${JSON_ONLY}`;
+
+export const STYLE_CHECK_SYSTEM_PROMPT = `${INTRO} 지금은 소설 전체에서 서술 문체가 갑자기 달라지는 곳을 찾는 편집자입니다.
+
+점검 원칙:
+- [설정]의 서술 문체를 기준으로, 서술(따옴표 밖) 문장이 그 문체에서 벗어나는 곳을 찾으세요: 종결어미가 갑자기 바뀌는 곳(예: -했다체 서술에 -했어요체가 끼는 곳), 서술 시점이 갑자기 달라지는 곳, 장 사이에서 어조가 눈에 띄게 달라지는 곳, 한 장만 수식어 밀도가 유난히 높거나 낮은 곳.
+- 확실한 것만 최대 ${MAX_FACT_FINDINGS}건 돌려주세요. 장면의 분위기 때문에 일부러 바꾼 어조, 인물의 생각을 그대로 옮긴 문장은 지적하지 마세요. 문제가 없으면 findings를 빈 배열로 돌려주세요.
+- ${FINDING_SHAPE}
+- fix는 고칠 구절이 분명할 때만 쓰세요. 최소한만 바꾸고, before는 그 문단에 한 번만 나오는 구절을 그대로 옮기세요. fix.before와 fix.after에 따옴표 글자(“ ” ")를 넣지 말고, 숫자·사실은 바꾸지 마세요. 고칠 구절이 분명하지 않으면(예: 장 전체의 어조 차이) fix.before를 빈 문자열로 두고 occurrences로 위치만 알리세요.
+- 대사(따옴표 안)는 보지 마세요. 줄거리, 인물, 시점 설정은 바꾸지 마세요.
+${DATA_NOTICE}
+${JSON_ONLY}`;
+
+export function buildDialogueCheckTask(): string {
+  return `[요청]
+대상: 소설 전체
+[소설 본문] 전체에서 따옴표 안의 대사 중 입말로 자연스럽지 않은 곳을 findings로 돌려주세요. 항목마다 topic(주제), description(한 문장 설명), occurrences(위치마다 chapterNumber, paragraphNumber, quote), fix(chapterNumber, paragraphNumber, before, after, reason)를 쓰세요. 정정 제안을 하지 않으려면 fix.before를 빈 문자열로 쓰세요.`;
+}
+
+export function buildStyleCheckTask(): string {
+  return `[요청]
+대상: 소설 전체
+[소설 본문] 전체에서 서술 문체가 갑자기 달라지는 곳을 findings로 돌려주세요. 항목마다 topic(주제), description(한 문장 설명), occurrences(위치마다 chapterNumber, paragraphNumber, quote), fix(chapterNumber, paragraphNumber, before, after, reason)를 쓰세요. 정정 제안을 하지 않으려면 fix.before를 빈 문자열로 쓰세요.`;
+}
+
+/**
+ * ⑤⑥ 점검 결과 검증. validateFactFindings의 규칙(위치·정확히 한 번·따옴표 글자·겹침·8건)에 더해,
+ * 아라비아 숫자 덩어리가 after에 없는 fix는 못 쓰게 한다. 못 쓰게 된 fix는 겹침 자리도 차지하지 않도록 먼저 비운다(항목은 위치가 있으면 남는다).
+ */
+export function validateCheckFindings(raw: RawFactFinding[], chapters: MasterChapter[]): FactFinding[] {
+  return validateFactFindings(
+    raw.map((r) => (keepsNumbers(r.fix.before, r.fix.after) ? r : { ...r, fix: { ...r.fix, before: "" } })),
+    chapters,
+  );
 }

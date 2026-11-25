@@ -3,9 +3,20 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 vi.mock("server-only", () => ({}));
 vi.mock("./structured");
 
-import { suggestIdeas, polishParagraph, reviewStory, generatePreReview, suggestStructure, polishChapter, checkFacts } from "./editor";
+import {
+  suggestIdeas,
+  polishParagraph,
+  reviewStory,
+  generatePreReview,
+  suggestStructure,
+  polishChapter,
+  checkFacts,
+  checkDialogue,
+  checkStyle,
+} from "./editor";
 import { SYSTEM_PROMPT, IDEAS_SYSTEM_PROMPT, POLISH_SYSTEM_PROMPT, STRUCTURE_SYSTEM_PROMPT } from "./editing";
-import { FACTS_SYSTEM_PROMPT, buildChapterPolishSystemPrompt } from "./preprocessing";
+import { DIALOGUE_CHECK_SYSTEM_PROMPT, FACTS_SYSTEM_PROMPT, STYLE_CHECK_SYSTEM_PROMPT, buildChapterPolishSystemPrompt } from "./preprocessing";
+import { factsSchema } from "./schemas";
 import * as structured from "./structured";
 import type { MasterChapter } from "@/lib/masterReview";
 
@@ -238,6 +249,39 @@ describe("checkFacts", () => {
     const call = mockCall.mock.calls[0][0];
     expect(call.system).toBe(FACTS_SYSTEM_PROMPT);
     expect(call.effort).toBe("high");
+    expect(call.context).toContain("## 2장. 둘째");
+    expect(call.context).toContain("## 1장. 첫째");
+  });
+});
+
+describe.each([
+  ["checkDialogue", checkDialogue, DIALOGUE_CHECK_SYSTEM_PROMPT],
+  ["checkStyle", checkStyle, STYLE_CHECK_SYSTEM_PROMPT],
+])("%s", (name, check, prompt) => {
+  it("전체 원고를 high effort(④와 같아 캐시 공유)로 보내고 검증된 항목만 돌려준다", async () => {
+    const fix = { chapterNumber: 2, paragraphNumber: 1, before: "할아버지가 왔다.", after: "할아버지가 오셨다.", reason: "r" };
+    mockCall.mockResolvedValueOnce({
+      findings: [
+        { topic: "t", description: "d", occurrences: [{ chapterNumber: 2, paragraphNumber: 1, quote: "할아버지가" }], fix },
+        { topic: "엉뚱함", description: "d", occurrences: [{ chapterNumber: 1, paragraphNumber: 1, quote: "없는 구절" }], fix: { ...fix, before: "" } },
+      ],
+    });
+
+    const result = await check(base);
+
+    expect(result).toEqual([
+      {
+        topic: "t",
+        description: "d",
+        occurrences: [{ chapterNumber: 2, paragraphIndex: 0, quote: "할아버지가" }],
+        fix: { chapterNumber: 2, paragraphIndex: 0, before: "할아버지가 왔다.", after: "할아버지가 오셨다.", reason: "r" },
+      },
+    ]);
+    const call = mockCall.mock.calls[0][0];
+    expect(call.label).toBe(name);
+    expect(call.system).toBe(prompt);
+    expect(call.effort).toBe("high");
+    expect(call.schema).toBe(factsSchema);
     expect(call.context).toContain("## 2장. 둘째");
     expect(call.context).toContain("## 1장. 첫째");
   });
