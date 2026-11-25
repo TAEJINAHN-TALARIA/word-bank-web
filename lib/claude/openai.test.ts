@@ -3,7 +3,8 @@ import { z } from "zod";
 
 vi.mock("server-only", () => ({}));
 
-import { OPENAI_REVIEW_MODEL, buildOpenAIInput, callStructuredOpenAI, openAIUsageToChatUsage } from "./openai";
+import { OPENAI_REVIEW_MODEL, buildOpenAIInput, callStructuredOpenAI, openAIUsageToChatUsage, streamConversationOpenAI } from "./openai";
+import type { ChatEvent, ChatMessage } from "@/lib/chatProtocol";
 import { ClaudeCallError } from "./callError";
 
 const schema = z.object({ items: z.array(z.object({ text: z.string() })) });
@@ -173,5 +174,169 @@ describe("buildOpenAIInput", () => {
       { role: "developer", content: "지시" },
       { role: "user", content: "질문" },
     ]);
+  });
+});
+
+// ── 대화 스트림 ──────────────────────────────────────────────────────────────
+
+const sse = (type: string, data: Record<string, unknown> = {}) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
+const delta = (text: string) => sse("response.output_text.delta", { delta: text });
+const done = (usage: unknown = { input_tokens: 100, output_tokens: 7, input_tokens_details: { cached_tokens: 60 } }) =>
+  sse("response.completed", { response: { status: "completed", usage } });
+
+// 조각(chunks)을 하나씩 내보내는 가짜 SSE 응답. 이벤트 경계와 상관없이 자른 조각을 그대로 넘긴다.
+function fakeStream(chunks: (string | Uint8Array)[], init: { ok?: boolean; status?: number; failAt?: Error } = {}) {
+  const calls: { url: string; init: { headers: Record<string, string>; body: string; signal?: AbortSignal } }[] = [];
+  const impl = (async (url: string, req: { headers: Record<string, string>; body: string; signal?: AbortSignal }) => {
+    calls.push({ url, init: req });
+    const encoder = new TextEncoder();
+    let i = 0;
+    return {
+      ok: init.ok ?? true,
+      status: init.status ?? 200,
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (i < chunks.length) {
+            const chunk = chunks[i++];
+            controller.enqueue(typeof chunk === "string" ? encoder.encode(chunk) : chunk);
+          } else if (init.failAt) controller.error(init.failAt);
+          else controller.close();
+        },
+      }),
+    };
+  }) as unknown as typeof fetch;
+  return { impl, calls, body: (): Body => JSON.parse(calls[0].init.body) };
+}
+
+async function collect(generator: AsyncGenerator<ChatEvent>): Promise<ChatEvent[]> {
+  const out: ChatEvent[] = [];
+  for await (const event of generator) out.push(event);
+  return out;
+}
+
+const history: ChatMessage[] = [
+  { role: "user", content: "[지금 보는 곳: 1장 1문단]\n이 문단 어때?" },
+  { role: "assistant", content: "좋아요." },
+  { role: "user", content: "[지금 보는 곳: 1장 2문단]\n이건?" },
+];
+const chat = { system: "시스템", context: "[소설 본문]\n본문", messages: history, effort: "medium" as const };
+
+describe("streamConversationOpenAI", () => {
+  it("요청: stream true, 대화 기록 매핑, 이전 답변은 output_text", async () => {
+    const f = fakeStream([done()]);
+    const signal = new AbortController().signal;
+    await collect(streamConversationOpenAI({ ...chat, signal }, f.impl));
+
+    expect(f.calls[0].url).toBe("https://api.openai.com/v1/responses");
+    expect(f.calls[0].init.headers.Authorization).toBe("Bearer sk-test");
+    expect(f.calls[0].init.signal).toBe(signal);
+    const body = f.body();
+    expect(body.model).toBe(OPENAI_REVIEW_MODEL);
+    expect(body.stream).toBe(true);
+    expect(body.max_output_tokens).toBe(8000);
+    expect(body.reasoning).toEqual({ effort: "medium" });
+    expect(body.prompt_cache_options).toEqual({ mode: "explicit" });
+    expect(body.input).toEqual([
+      { role: "developer", content: [{ type: "input_text", text: chat.context, prompt_cache_breakpoint: { mode: "explicit" } }] },
+      { role: "developer", content: "시스템" },
+      { role: "user", content: history[0].content },
+      { role: "assistant", content: [{ type: "output_text", text: "좋아요." }] },
+      { role: "user", content: history[2].content },
+    ]);
+  });
+
+  it("response.output_text.delta는 delta로, response.completed는 done과 onUsage 한 번", async () => {
+    const f = fakeStream([sse("response.created"), delta("가"), delta("나"), done()]);
+    const onUsage = vi.fn();
+    expect(await collect(streamConversationOpenAI({ ...chat, onUsage }, f.impl))).toEqual([
+      { t: "delta", text: "가" },
+      { t: "delta", text: "나" },
+      { t: "done" },
+    ]);
+    expect(onUsage).toHaveBeenCalledTimes(1);
+    expect(onUsage).toHaveBeenCalledWith({ input_tokens: 40, output_tokens: 7, cache_creation_input_tokens: 0, cache_read_input_tokens: 60 });
+  });
+
+  it("SSE 조각이 이벤트 중간에서 끊겨도 이어 붙여 읽는다", async () => {
+    const all = delta("가나") + delta("다") + done();
+    const f = fakeStream([all.slice(0, 20), all.slice(20, 75), all.slice(75)]);
+    expect(await collect(streamConversationOpenAI(chat, f.impl))).toEqual([
+      { t: "delta", text: "가나" },
+      { t: "delta", text: "다" },
+      { t: "done" },
+    ]);
+  });
+
+  it("한글이 조각 경계의 바이트 중간에서 잘려도 깨지지 않는다", async () => {
+    const bytes = new TextEncoder().encode(delta("한글") + done());
+    const cut = bytes.indexOf(0xed) + 1; // '한'(3바이트)의 첫 바이트 바로 뒤
+    const f = fakeStream([bytes.slice(0, cut), bytes.slice(cut)]);
+    expect(await collect(streamConversationOpenAI(chat, f.impl))).toEqual([{ t: "delta", text: "한글" }, { t: "done" }]);
+  });
+
+  it("response.incomplete(max_output_tokens)는 길어서 잘렸다는 오류 이벤트", async () => {
+    const f = fakeStream([delta("가"), sse("response.incomplete", { response: { incomplete_details: { reason: "max_output_tokens" } } })]);
+    expect(await collect(streamConversationOpenAI(chat, f.impl))).toEqual([
+      { t: "delta", text: "가" },
+      { t: "error", message: "응답이 길어 중간에 잘렸습니다. 요청 범위를 줄여 다시 시도해 주세요" },
+    ]);
+  });
+
+  it("response.failed와 error 이벤트와 HTTP 오류는 오류 이벤트 하나로 끝난다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    for (const chunks of [[delta("가"), sse("response.failed", { response: { error: { message: "x" } } })], [sse("error", { message: "y" })]]) {
+      const events = await collect(streamConversationOpenAI(chat, fakeStream(chunks).impl));
+      expect(events.filter((e) => e.t === "error")).toHaveLength(1);
+      expect(events.at(-1)).toMatchObject({ t: "error" });
+      expect(events.some((e) => e.t === "done")).toBe(false);
+    }
+    expect(await collect(streamConversationOpenAI(chat, fakeStream([], { ok: false, status: 429 }).impl))).toEqual([
+      { t: "error", message: "요청이 많아 잠시 뒤에 다시 시도해 주세요" },
+    ]);
+    expect(await collect(streamConversationOpenAI(chat, fakeStream([], { ok: false, status: 500 }).impl))).toEqual([
+      { t: "error", message: "OpenAI API 오류 (500)" },
+    ]);
+  });
+
+  it("refusal은 정책상 거절 오류 이벤트", async () => {
+    const f = fakeStream([sse("response.refusal.delta", { delta: "안 됩니다" }), done()]);
+    expect(await collect(streamConversationOpenAI(chat, f.impl))).toEqual([
+      { t: "error", message: "AI가 이 요청을 처리하지 못했습니다 (정책상 거절)" },
+    ]);
+  });
+
+  it("완료 이벤트 없이 스트림이 끝나면 오류 이벤트", async () => {
+    const events = await collect(streamConversationOpenAI(chat, fakeStream([delta("가")]).impl));
+    expect(events[0]).toEqual({ t: "delta", text: "가" });
+    expect(events.at(-1)).toMatchObject({ t: "error" });
+  });
+
+  it("스트림 읽기 중 예외는 던지지 않고 오류 이벤트 하나로 끝난다", async () => {
+    const f = fakeStream([delta("가")], { failAt: new Error("boom") });
+    expect(await collect(streamConversationOpenAI(chat, f.impl))).toEqual([
+      { t: "delta", text: "가" },
+      { t: "error", message: "boom" },
+    ]);
+  });
+
+  it("중단(signal abort)이면 오류 이벤트 없이 조용히 끝난다", async () => {
+    const controller = new AbortController();
+    const f = fakeStream([delta("가")], { failAt: new Error("aborted") });
+    const events: ChatEvent[] = [];
+    for await (const event of streamConversationOpenAI({ ...chat, signal: controller.signal }, f.impl)) {
+      events.push(event);
+      controller.abort();
+    }
+    expect(events).toEqual([{ t: "delta", text: "가" }]);
+  });
+
+  it("키 없음 → 오류 이벤트 'OpenAI API 키가 없습니다' (예외로 던지지 않는다)", async () => {
+    delete process.env.OPENAI_API_KEY;
+    const f = fakeStream([done()]);
+    const events = await collect(streamConversationOpenAI(chat, f.impl));
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ t: "error" });
+    expect((events[0] as { message: string }).message).toMatch(/OpenAI API 키가 없습니다/);
+    expect(f.calls).toHaveLength(0);
   });
 });

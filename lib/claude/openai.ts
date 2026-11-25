@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { ClaudeCallError } from "./callError";
+import type { ChatEvent, ChatMessage } from "@/lib/chatProtocol";
 import type { ChatUsage } from "./structured";
 
 export const OPENAI_REVIEW_MODEL = "gpt-6.1-terra";
@@ -113,5 +114,106 @@ export async function callStructuredOpenAI<T extends z.ZodType>(
     return input.schema.parse(JSON.parse(text ?? ""));
   } catch {
     throw new ClaudeCallError("AI 응답을 해석하지 못했습니다");
+  }
+}
+
+type StreamEvent = {
+  type?: string;
+  delta?: string;
+  message?: string;
+  response?: { usage?: OpenAIUsage; incomplete_details?: { reason?: string }; error?: { message?: string } };
+};
+
+/** SSE 한 덩어리(`event:`·`data:` 줄들)에서 data 줄을 모아 JSON으로 읽는다. 읽을 수 없으면 null. */
+function parseSseBlock(block: string): StreamEvent | null {
+  const data = block
+    .split("\n")
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart())
+    .join("\n");
+  if (!data || data === "[DONE]") return null;
+  try {
+    return JSON.parse(data) as StreamEvent;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 대화 응답을 스트리밍으로 받아 화면에 보낼 이벤트로 바꾼다. Claude 쪽 `streamConversation`과 같은 규칙:
+ * 예외는 던지지 않고 마지막에 error 이벤트로 알리고, 편집자가 중단(signal abort)한 것은 오류가 아니므로 조용히 끝낸다.
+ * 서버 측 폴백이 없어서 reset 이벤트는 내지 않는다.
+ */
+export async function* streamConversationOpenAI(
+  input: {
+    system: string;
+    context: string;
+    messages: ChatMessage[];
+    effort: "low" | "medium" | "high";
+    signal?: AbortSignal;
+    onUsage?: (usage: ChatUsage) => void;
+  },
+  fetchImpl: typeof fetch = fetch,
+): AsyncGenerator<ChatEvent> {
+  try {
+    const key = requireKey();
+    const history = input.messages.map((m) =>
+      m.role === "assistant" ? { role: "assistant", content: [{ type: "output_text", text: m.content }] } : { role: "user", content: m.content },
+    );
+    const res = await fetchImpl(RESPONSES_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({
+        model: OPENAI_REVIEW_MODEL,
+        stream: true,
+        max_output_tokens: 8000,
+        reasoning: { effort: input.effort },
+        prompt_cache_options: { mode: "explicit" },
+        input: buildOpenAIInput(input.context, input.system, history),
+      }),
+      signal: input.signal,
+    });
+    if (!res.ok) throw httpError(res.status);
+    if (!res.body) throw new ClaudeCallError("AI 응답을 받지 못했습니다");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let refused = false;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, "\n");
+      let end: number;
+      while ((end = buffer.indexOf("\n\n")) >= 0) {
+        const event = parseSseBlock(buffer.slice(0, end));
+        buffer = buffer.slice(end + 2);
+        if (!event) continue;
+
+        if (event.type === "response.output_text.delta") {
+          yield { t: "delta", text: event.delta ?? "" };
+        } else if (event.type === "response.refusal.delta") {
+          refused = true;
+        } else if (event.type === "response.completed") {
+          if (event.response?.usage) input.onUsage?.(openAIUsageToChatUsage(event.response.usage));
+          yield refused ? { t: "error", message: REFUSED } : { t: "done" };
+          return;
+        } else if (event.type === "response.incomplete") {
+          const truncated = event.response?.incomplete_details?.reason === "max_output_tokens";
+          yield { t: "error", message: truncated ? TRUNCATED : "AI 응답이 완료되지 못했습니다" };
+          return;
+        } else if (event.type === "response.failed" || event.type === "error") {
+          // 상세 사유는 서버 로그에만 남기고 화면에는 고정 문구를 보인다.
+          console.error("[editor-chat] openai stream error", event.response?.error?.message ?? event.message);
+          yield { t: "error", message: "AI 응답을 만들지 못했습니다. 잠시 뒤에 다시 시도해 주세요" };
+          return;
+        }
+      }
+    }
+    // 완료 이벤트 없이 끝난 스트림은 중간에 끊긴 것이다.
+    yield { t: "error", message: refused ? REFUSED : "AI 응답이 중간에 끊겼습니다. 다시 시도해 주세요" };
+  } catch (err) {
+    if (input.signal?.aborted) return;
+    yield { t: "error", message: err instanceof ClaudeCallError ? err.message : err instanceof Error ? err.message : "OpenAI 호출 실패" };
   }
 }
