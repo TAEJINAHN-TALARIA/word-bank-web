@@ -90,8 +90,16 @@ async function settle<T extends { error?: string }>(
 
 export type FactCheck = { findings?: FactFinding[]; error?: string };
 
+/** ④⑤⑥ 점검 하나의 결과를 받는다. 던져도 { error }로 바꿔 다른 점검과 이후 단계가 멈추지 않게 한다. */
+export function fetchCheck(
+  request: () => Promise<{ error?: string; findings?: FactFinding[] }>,
+  failedMessage: string,
+): Promise<FactCheck> {
+  return settle<FactCheck>(request, (r) => (r.findings ? { findings: r.findings } : null), failedMessage);
+}
+
 export function fetchFactCheck(request: () => Promise<{ error?: string; findings?: FactFinding[] }>): Promise<FactCheck> {
-  return settle<FactCheck>(request, (r) => (r.findings ? { findings: r.findings } : null), "사실관계 점검을 받지 못했습니다");
+  return fetchCheck(request, "사실관계 점검을 받지 못했습니다");
 }
 
 export type ChapterPolish = { changes?: ChapterPolishChange[]; received?: number; error?: string };
@@ -117,6 +125,26 @@ export function applyFactFixes(chapters: MasterChapter[], fixes: FactFix[]): Mas
       ),
     ),
   }));
+}
+
+/**
+ * 편집자가 고른 ④⑤⑥ 정정을 **주어진 순서대로** 한 건씩 적용한다. 같은 구절을 둘 이상의 점검이 고치자고 하면 앞의 것이 먼저
+ * 바꾸고, 그 시점의 문단에 before가 정확히 한 번 있지 않은 뒤의 것은 건너뛴다(건너뛴 수를 돌려준다). 입력은 바꾸지 않는다.
+ */
+export function applyCheckFixes(chapters: MasterChapter[], fixes: FactFix[]): { chapters: MasterChapter[]; skipped: number } {
+  const next = chapters.map((chapter) => ({ ...chapter, paragraphs: [...chapter.paragraphs] }));
+  let skipped = 0;
+  for (const fix of fixes) {
+    const paragraphs = next.find((c) => c.chapterNumber === fix.chapterNumber)?.paragraphs;
+    const paragraph = paragraphs?.[fix.paragraphIndex];
+    const start = paragraph === undefined || !fix.before ? -1 : paragraph.indexOf(fix.before);
+    if (!paragraphs || paragraph === undefined || start < 0 || paragraph.indexOf(fix.before, start + 1) >= 0) {
+      skipped += 1;
+      continue;
+    }
+    paragraphs[fix.paragraphIndex] = paragraph.slice(0, start) + fix.after + paragraph.slice(start + fix.before.length);
+  }
+  return { chapters: next, skipped };
 }
 
 /** ③ 문장 다듬기 결과(장 번호별)를 적용한다. 오류이거나 아직 받지 못한 장은 원문 그대로다. */

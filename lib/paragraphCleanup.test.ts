@@ -3,8 +3,10 @@ import {
   buildCleanupBase,
   fetchChapterSuggestion,
   fetchFactCheck,
+  fetchCheck,
   fetchChapterPolish,
   applyFactFixes,
+  applyCheckFixes,
   applyPolishes,
   summarizeChapter,
 } from "./paragraphCleanup";
@@ -111,6 +113,30 @@ describe("summarizeChapter", () => {
   });
 });
 
+describe("fetchCheck", () => {
+  const finding: FactFinding = { topic: "대사", description: "공문식", occurrences: [], fix: null };
+  const failed = "대사 구어체 점검을 받지 못했습니다";
+
+  it("성공하면 { findings }, 빈 배열도 정상이다", async () => {
+    expect(await fetchCheck(async () => ({ findings: [finding] }), failed)).toEqual({ findings: [finding] });
+    expect(await fetchCheck(async () => ({ findings: [] }), failed)).toEqual({ findings: [] });
+  });
+
+  it("{ error }는 그대로, findings가 없으면 넘긴 기본 문구", async () => {
+    expect(await fetchCheck(async () => ({ error: "응답이 너무 길어요" }), failed)).toEqual({ error: "응답이 너무 길어요" });
+    expect(await fetchCheck(async () => ({}), failed)).toEqual({ error: failed });
+  });
+
+  it("호출이 던지면 예외 메시지(Error), 아니면 기본 문구로 바꿔 던지지 않는다", async () => {
+    expect(
+      await fetchCheck(async () => {
+        throw new Error("네트워크 끊김");
+      }, failed),
+    ).toEqual({ error: "네트워크 끊김" });
+    expect(await fetchCheck(() => Promise.reject("문자열 예외"), failed)).toEqual({ error: failed });
+  });
+});
+
 describe("fetchFactCheck", () => {
   const finding: FactFinding = { topic: "나이", description: "충돌", occurrences: [], fix: null };
 
@@ -160,6 +186,65 @@ describe("fetchChapterPolish", () => {
       }),
     ).toEqual({ error: "네트워크가 끊겼어요" });
     expect(await fetchChapterPolish(() => Promise.reject("문자열 예외"))).toEqual({ error: "문장 다듬기를 받지 못했습니다" });
+  });
+});
+
+describe("applyCheckFixes", () => {
+  const fix = (chapterNumber: number, paragraphIndex: number, before: string, after: string): FactFix => ({
+    chapterNumber,
+    paragraphIndex,
+    before,
+    after,
+    reason: "r",
+  });
+
+  it("서로 다른 문단의 정정은 모두 적용되고 입력은 바뀌지 않는다", () => {
+    const input = [chapter(1, ["가나다", "라마바"]), chapter(2, ["사아자"])];
+    const snapshot = JSON.parse(JSON.stringify(input));
+    const { chapters, skipped } = applyCheckFixes(input, [fix(1, 1, "마", "먀"), fix(2, 0, "아", "야")]);
+    expect(chapters).toEqual([chapter(1, ["가나다", "라먀바"]), chapter(2, ["사야자"])]);
+    expect(skipped).toBe(0);
+    expect(input).toEqual(snapshot);
+  });
+
+  it("같은 문단의 겹치지 않는 정정 둘이 모두 적용된다", () => {
+    const { chapters, skipped } = applyCheckFixes([chapter(1, ["하나 둘 셋"])], [fix(1, 0, "하나", "일"), fix(1, 0, "셋", "삼")]);
+    expect(chapters[0].paragraphs).toEqual(["일 둘 삼"]);
+    expect(skipped).toBe(0);
+  });
+
+  it("앞 정정이 before를 바꿔 뒤 정정의 before가 사라지면 뒤 정정만 건너뛰고 센다", () => {
+    const { chapters, skipped } = applyCheckFixes([chapter(1, ["본인은 환영하는 바입니다."])], [
+      fix(1, 0, "본인은 환영하는 바입니다.", "어서 와요."),
+      fix(1, 0, "환영하는 바입니다.", "반가워요."),
+    ]);
+    expect(chapters[0].paragraphs).toEqual(["어서 와요."]);
+    expect(skipped).toBe(1);
+  });
+
+  it("순서를 바꾸면 어느 쪽이 적용되는지도 달라진다(주어진 순서대로)", () => {
+    const a = fix(1, 0, "본인은 환영하는 바입니다.", "어서 와요.");
+    const b = fix(1, 0, "환영하는 바입니다.", "반가워요.");
+    const input = [chapter(1, ["본인은 환영하는 바입니다."])];
+    expect(applyCheckFixes(input, [a, b]).chapters[0].paragraphs).toEqual(["어서 와요."]);
+    expect(applyCheckFixes(input, [b, a]).chapters[0].paragraphs).toEqual(["본인은 반가워요."]);
+    expect(applyCheckFixes(input, [b, a]).skipped).toBe(1);
+  });
+
+  it("before가 문단에 두 번 나오거나 없으면 건너뛴다", () => {
+    const input = [chapter(1, ["응 응", "다른 글"])];
+    const { chapters, skipped } = applyCheckFixes(input, [fix(1, 0, "응", "네"), fix(1, 1, "없는 구절", "x"), fix(9, 0, "응", "네")]);
+    expect(chapters).toEqual(input);
+    expect(skipped).toBe(3);
+  });
+
+  it("정정이 없으면 같은 내용의 복사본을 돌려준다", () => {
+    const input = [chapter(1, ["가나다"])];
+    const { chapters, skipped } = applyCheckFixes(input, []);
+    expect(chapters).toEqual(input);
+    expect(chapters).not.toBe(input);
+    expect(chapters[0].paragraphs).not.toBe(input[0].paragraphs);
+    expect(skipped).toBe(0);
   });
 });
 
