@@ -3,7 +3,7 @@
 // 설계: docs/superpowers/specs/2026-11-22-editor-cleanup-modal-titles-design.md
 
 import { splitDialogue, type DialogueSplitMode } from "@/lib/dialogueSplit";
-import { applyChanges, applyStructureChanges, type StructureChange } from "@/lib/claude/editing";
+import { applyStructureChanges, type StructureChange } from "@/lib/claude/editing";
 import {
   applyChapterPolish,
   type ChapterPolishChange,
@@ -112,19 +112,6 @@ export function fetchChapterPolish(
     (r) => (r.changes ? { changes: r.changes, received: r.received ?? r.changes.length } : null),
     "문장 다듬기를 받지 못했습니다",
   );
-}
-
-/** 편집자가 고른 ④ 정정만 해당 문단에 적용한다. 입력은 바꾸지 않는다. */
-export function applyFactFixes(chapters: MasterChapter[], fixes: FactFix[]): MasterChapter[] {
-  return chapters.map((chapter) => ({
-    ...chapter,
-    paragraphs: chapter.paragraphs.map((paragraph, index) =>
-      applyChanges(
-        paragraph,
-        fixes.filter((f) => f.chapterNumber === chapter.chapterNumber && f.paragraphIndex === index),
-      ),
-    ),
-  }));
 }
 
 /**

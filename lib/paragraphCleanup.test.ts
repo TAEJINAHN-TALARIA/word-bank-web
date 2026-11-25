@@ -5,7 +5,6 @@ import {
   fetchFactCheck,
   fetchCheck,
   fetchChapterPolish,
-  applyFactFixes,
   applyCheckFixes,
   applyPolishes,
   summarizeChapter,
@@ -248,29 +247,13 @@ describe("applyCheckFixes", () => {
   });
 });
 
-describe("applyFactFixes / applyPolishes", () => {
+describe("applyPolishes", () => {
   const fix = (chapterNumber: number, paragraphIndex: number, before: string, after: string): FactFix => ({
     chapterNumber,
     paragraphIndex,
     before,
     after,
     reason: "r",
-  });
-
-  it("applyFactFixes: 고른 정정만 해당 문단에 적용하고 입력은 바꾸지 않는다", () => {
-    const input = [chapter(1, ["수진은 14살이었다.", "다른 문단"]), chapter(2, ["열여섯 살의 수진이 왔다."])];
-    const snapshot = JSON.parse(JSON.stringify(input));
-    const out = applyFactFixes(input, [fix(2, 0, "열여섯 살", "열네 살")]);
-    expect(out).toEqual([chapter(1, ["수진은 14살이었다.", "다른 문단"]), chapter(2, ["열네 살의 수진이 왔다."])]);
-    expect(input).toEqual(snapshot);
-  });
-
-  it("applyFactFixes: 정정이 없으면 같은 내용의 복사본을 돌려준다", () => {
-    const input = [chapter(1, ["가나다"])];
-    const out = applyFactFixes(input, []);
-    expect(out).toEqual(input);
-    expect(out).not.toBe(input);
-    expect(out[0].paragraphs).not.toBe(input[0].paragraphs);
   });
 
   it("applyPolishes: 수신한 장만 바뀌고 오류만 있는 장과 항목이 없는 장은 그대로다", () => {
@@ -297,7 +280,7 @@ describe("applyFactFixes / applyPolishes", () => {
       chapter(1, ["그녀는 아주 조용히 걸었다. “가자.” 수진은 14살이었다."]),
       chapter(2, ["열여섯 살의 수진이 왔다."]),
     ];
-    const afterFacts = applyFactFixes(input, [fix(2, 0, "열여섯 살", "열네 살")]);
+    const afterFacts = applyCheckFixes(input, [fix(2, 0, "열여섯 살", "열네 살")]).chapters;
     const polished = applyPolishes(afterFacts, {
       1: { changes: [{ paragraphIndex: 0, before: "아주 ", after: "", reason: "r" }], received: 1 },
     });
