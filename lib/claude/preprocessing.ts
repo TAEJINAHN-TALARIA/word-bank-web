@@ -4,30 +4,68 @@
 import { quotedRanges } from "@/lib/dialogueSplit";
 import { DATA_NOTICE, INTRO, JSON_ONLY, KEEP_STYLE, applyChanges, validateChanges, type PolishChange } from "./editing";
 import type { MasterChapter } from "@/lib/masterReview";
+import { levelRubric } from "./levelRubric";
 
-export const MAX_CHAPTER_POLISH_CHANGES = 20;
+export const MAX_CHAPTER_POLISH_CHANGES = 10;
 
-// 장 전체를 담백하게 다듬는다. 문단마다 고칠 구절 목록만 돌려받고, 대사·사실·문체는 건드리지 않는다.
-export const CHAPTER_POLISH_SYSTEM_PROMPT = `${INTRO} 지금은 장 전체의 서술을 담백하게 다듬는 편집자입니다.
+const MAX_SENTENCE_CHARS = 120;
+// 모델은 글자 수를 세지 못해서, 이 길이를 넘는 문장은 코드가 찾아 대상 목록으로 건넨다(파일럿에서 규칙만으로는 움직이지 않았다).
+export type LongSentence = { paragraphNumber: number; sentence: string };
 
-다듬기 원칙:
-- 수식어, 부사, 겹치는 꾸밈말이 많은 서술을 줄이고 군더더기를 덜어내세요. 문단을 다시 쓰지 말고 고칠 구절만 고르세요.
+/** 120자를 넘는 문장을 문단 번호(1부터)와 함께 찾는다. 따옴표 글자가 든 문장(대사 포함)은 제외한다. */
+export function findLongSentences(paragraphs: string[]): LongSentence[] {
+  const found: LongSentence[] = [];
+  paragraphs.forEach((paragraph, i) => {
+    for (const sentence of paragraph.split(/(?<=[.?!])\s+/)) {
+      if (sentence.length > MAX_SENTENCE_CHARS && !QUOTE_CHARS.test(sentence)) found.push({ paragraphNumber: i + 1, sentence });
+    }
+  });
+  return found;
+}
+
+// 장 전체를 그 레벨 독자가 막힐 곳만 마일드하게 손본다. 문단마다 고칠 구절 목록만 돌려받고, 대사·사실·문체·문장 모양은 건드리지 않는다.
+// 레벨 기준표(levelRubric)를 아는 레벨이면 기준 블록을 싣는다. 파일럿은 Lv6에서만 돌렸다.
+export function buildChapterPolishSystemPrompt(level: string): string {
+  const rubric = levelRubric(level);
+  const rubricBlock = rubric
+    ? `[레벨 기준 — ${level}, ${rubric.reader}]
+- 어휘·문장구조: ${rubric.vocabulary}
+- 문장 길이 평균은 목표일 뿐이고 고치는 조건이 아닙니다.
+
+`
+    : "";
+  return `${INTRO} 지금은 이 소설의 독자 수준(레벨)에 맞게 서술을 마일드하게 손보는 편집자입니다.
+
+${rubricBlock}다듬기 원칙:
+- 문장의 모양(한 문장인 것, 어순, 종결어미)은 그대로 두세요. 문장을 쪼개지 마세요. 이 레벨 독자가 막힐 곳만 최소한으로 고치세요.
+- 고칠 곳: (1) 이 레벨에도 어려운 낱말·전문어를 쉬운 말로 바꾸기, (2) 같은 뜻을 겹쳐 꾸미는 말 중 가장 무거운 한 겹 덜기, (3) 레벨 기준을 크게 넘는 얽힌 문장은 가장 무거운 부분만 손보기.
+- 이 레벨 독자가 이미 읽을 수 있는 문장은 건드리지 마세요. ${MAX_SENTENCE_CHARS}자 이하의 문장은 길다는 이유만으로 고치지 마세요.
+- ${MAX_SENTENCE_CHARS}자를 넘는 문장은 그 레벨 독자에게 너무 얽혀 있으므로, 문장을 하나로 유지한 채 가장 무거운 꾸밈 한 겹이나 한 덩어리를 덜어 읽기 쉽게 하세요(뜻이 되는 부분은 남기세요).
+- 비유, 어조, 분위기, 정서를 만드는 표현을 장식이라는 이유로 지우지 마세요. 정서를 만드는 감각어와 은유는 그대로 두고, 뜻이 약해지는 낱말로도 바꾸지 마세요.
 - 의미, 줄거리, 인물, 시점은 바꾸지 마세요. 새 내용을 더하지 마세요.
 - 수·나이·날짜 표현은 그대로 두세요. 아라비아 숫자뿐 아니라 '열네 살', '이틀 뒤'처럼 말로 쓴 것도 바꾸지 마세요.
 - 대사(따옴표 안)는 건드리지 마세요. 따옴표(“ ” " ' ‘ ’ 「 」)가 들어간 구절은 before와 after에 쓰지 마세요.
 - 고친 곳마다 paragraphNumber(문단 번호), before(그 문단에 있는 구절), after(바꾼 구절), reason(왜 바꿨는지 한 문장)을 쓰세요. before는 그 문단에서 글자 하나 다르지 않게 그대로 옮기고, 한 문단 안에서 서로 겹치지 않게 하세요. 항목 하나는 문단 하나에 대한 변경만 씁니다.
-- after는 before보다 짧거나 비슷하게 쓰세요.
+- after는 before보다 짧거나 비슷하게 쓰세요. 낱말을 풀어 쓰느라 늘어나는 경우도 8자 이내로 하세요.
 - 고칠 곳이 없으면 changes를 빈 배열로 돌려주세요. 장당 최대 ${MAX_CHAPTER_POLISH_CHANGES}건입니다.
 ${KEEP_STYLE}
 ${DATA_NOTICE}
 ${JSON_ONLY}`;
+}
 
-export function buildChapterPolishTask(input: { chapterNumber: number; instruction?: string }): string {
+export function buildChapterPolishTask(input: { chapterNumber: number; instruction?: string; targets?: LongSentence[] }): string {
   const instruction = input.instruction?.trim();
+  const targets = input.targets?.length
+    ? `
+
+[반드시 손볼 문장]
+아래 문장은 ${MAX_SENTENCE_CHARS}자를 넘어 이 레벨 독자에게 너무 얽혀 있습니다. 각 문장마다 문장은 하나로 유지한 채 가장 무거운 꾸밈 한 겹이나 한 덩어리를 덜어 changes에 넣으세요(뜻이 되는 부분은 남기세요).
+${input.targets.map((t) => `- ${t.paragraphNumber}문단: ${t.sentence}`).join("\n")}`
+    : "";
   return `[요청]
 대상: ${input.chapterNumber}장 전체 문단
 ${instruction ? `지시: ${instruction}\n` : ""}
-이 장에서 담백하게 다듬을 곳을 changes로 돌려주세요. paragraphNumber는 [소설 본문]에서 이 장의 문단 앞에 붙은 번호, before는 그 문단에 있는 구절을 그대로 옮긴 것, after는 바꾼 구절, reason은 한 문장으로 쓰세요.`;
+이 장에서 이 레벨 독자가 막힐 곳만 최소한으로 고칠 곳을 changes로 돌려주세요. paragraphNumber는 [소설 본문]에서 이 장의 문단 앞에 붙은 번호, before는 그 문단에 있는 구절을 그대로 옮긴 것, after는 바꾼 구절, reason은 한 문장으로 쓰세요.${targets}`;
 }
 
 export type RawChapterPolishChange = { paragraphNumber: number; before: string; after: string; reason: string };
@@ -42,8 +80,8 @@ function keepsNumbers(before: string, after: string): boolean {
 }
 
 /**
- * 장 단위 다듬기 결과 검증. 항목마다 가드(따옴표 글자, 대사 안쪽, 숫자 보존, 길이 120% 이하, 존재하는 문단)를 먼저 걸고,
- * 문단별로 묶어 기존 validateChanges(정확히 한 번·겹침·빈 줄·문단당 8건)로 마무리한 뒤, 합쳐서 앞에서부터 장당 20건에서 자른다.
+ * 장 단위 다듬기 결과 검증. 항목마다 가드(따옴표 글자, 대사 안쪽, 숫자 보존, 길이 120% 이하(또는 +8자 이하), 존재하는 문단)를 먼저 걸고,
+ * 문단별로 묶어 기존 validateChanges(정확히 한 번·겹침·빈 줄·문단당 8건)로 마무리한 뒤, 합쳐서 앞에서부터 장당 10건에서 자른다.
  * 따옴표 짝이 어긋난 문단은 안쪽·바깥을 알 수 없어 그 문단의 항목을 전부 버린다. received는 받은 항목 수다.
  */
 export function validateChapterPolish(raw: RawChapterPolishChange[], paragraphs: string[]): ChapterPolishResult {
@@ -58,7 +96,8 @@ export function validateChapterPolish(raw: RawChapterPolishChange[], paragraphs:
     if (!quoted) continue;
     if (QUOTE_CHARS.test(c.before) || QUOTE_CHARS.test(c.after)) continue;
     if (!keepsNumbers(c.before, c.after)) continue;
-    if (c.after.length > c.before.length * 1.2) continue;
+    // 길이 가드: 120% 이하이거나, 낱말 풀이로 8자 이하만 늘어난 것은 통과한다.
+    if (c.after.length > c.before.length * 1.2 && c.after.length - c.before.length > 8) continue;
     const start = c.before ? paragraph.indexOf(c.before) : -1;
     const end = start + c.before.length;
     if (start >= 0 && quoted.some(([s, e]) => start >= s && end <= e)) continue;

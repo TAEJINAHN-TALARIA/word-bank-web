@@ -24,10 +24,11 @@ import {
   type StructureChange,
 } from "./editing";
 import {
-  CHAPTER_POLISH_SYSTEM_PROMPT,
   FACTS_SYSTEM_PROMPT,
+  buildChapterPolishSystemPrompt,
   buildChapterPolishTask,
   buildFactsTask,
+  findLongSentences,
   validateChapterPolish,
   validateFactFindings,
   type ChapterPolishResult,
@@ -148,7 +149,7 @@ export async function generatePreReview(input: EditorContextInput): Promise<PreR
   return locateItems(raw.items, input.chapters);
 }
 
-// 전처리 ③ 문장 다듬기 — 챕터 전체를 읽고 담백하게 다듬을 곳 목록만 돌려준다. 본문은 바꾸지 않는다.
+// 전처리 ③ 문장 다듬기 — 챕터 전체를 읽고 그 레벨 독자가 막힐 곳만 최소한으로 고칠 곳 목록을 돌려준다(`input.level`이 레벨 기준표를 고른다). 본문은 바꾸지 않는다.
 export async function polishChapter(
   input: EditorContextInput & { chapterNumber: number; instruction?: string },
 ): Promise<ChapterPolishResult> {
@@ -158,9 +159,13 @@ export async function polishChapter(
     label: "polishChapter",
     schema: chapterPolishSchema,
     effort: "medium",
-    system: CHAPTER_POLISH_SYSTEM_PROMPT,
+    system: buildChapterPolishSystemPrompt(input.level),
     context: buildStoryContext(input),
-    task: buildChapterPolishTask({ chapterNumber: input.chapterNumber, instruction: input.instruction }),
+    task: buildChapterPolishTask({
+      chapterNumber: input.chapterNumber,
+      instruction: input.instruction,
+      targets: findLongSentences(chapter.paragraphs),
+    }),
   });
   return validateChapterPolish(raw.changes, chapter.paragraphs);
 }

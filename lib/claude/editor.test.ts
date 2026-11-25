@@ -5,7 +5,7 @@ vi.mock("./structured");
 
 import { suggestIdeas, polishParagraph, reviewStory, generatePreReview, suggestStructure, polishChapter, checkFacts } from "./editor";
 import { SYSTEM_PROMPT, IDEAS_SYSTEM_PROMPT, POLISH_SYSTEM_PROMPT, STRUCTURE_SYSTEM_PROMPT } from "./editing";
-import { CHAPTER_POLISH_SYSTEM_PROMPT, FACTS_SYSTEM_PROMPT } from "./preprocessing";
+import { FACTS_SYSTEM_PROMPT, buildChapterPolishSystemPrompt } from "./preprocessing";
 import * as structured from "./structured";
 import type { MasterChapter } from "@/lib/masterReview";
 
@@ -173,12 +173,29 @@ describe("polishChapter", () => {
       received: 2,
     });
     const call = mockCall.mock.calls[0][0];
-    expect(call.system).toBe(CHAPTER_POLISH_SYSTEM_PROMPT);
+    expect(call.system).toBe(buildChapterPolishSystemPrompt(base.level));
     expect(call.label).toBe("polishChapter");
     expect(call.effort).toBe("medium");
     expect(call.context).toContain("[2] 하늘이 흐렸다.");
     expect(call.task).toContain("1장 전체 문단");
     expect(call.task).toContain("더 짧게");
+    expect(call.task).not.toContain("[반드시 손볼 문장]"); // 이 장에는 120자 넘는 문장이 없다
+  });
+
+  it("120자 넘는 문장이 있는 장이면 그 문장을 [반드시 손볼 문장]으로 task에 싣는다", async () => {
+    const longSentence = "그녀는 " + "아주 오래된 ".repeat(20) + "문을 열었다.";
+    expect(longSentence.length).toBeGreaterThan(120);
+    mockCall.mockResolvedValueOnce({ changes: [] });
+
+    await polishChapter({
+      ...base,
+      chapters: [{ chapterNumber: 1, chapterTitle: "첫째", paragraphs: ["짧은 문단이다.", longSentence] }],
+      chapterNumber: 1,
+    });
+
+    const call = mockCall.mock.calls[0][0];
+    expect(call.task).toContain("[반드시 손볼 문장]");
+    expect(call.task).toContain(`- 2문단: ${longSentence}`);
   });
 
   it("없는 장이면 Claude를 부르지 않고 오류를 던진다", async () => {

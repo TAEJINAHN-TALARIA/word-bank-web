@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   MAX_CHAPTER_POLISH_CHANGES,
-  CHAPTER_POLISH_SYSTEM_PROMPT,
+  buildChapterPolishSystemPrompt,
   buildChapterPolishTask,
+  findLongSentences,
   validateChapterPolish,
   applyChapterPolish,
   type RawChapterPolishChange,
@@ -13,6 +14,7 @@ import {
   type RawFactFinding,
 } from "./preprocessing";
 import { DATA_NOTICE } from "./editing";
+import { levelRubric } from "./levelRubric";
 import type { MasterChapter } from "@/lib/masterReview";
 
 const P = ["그녀는 아주아주 매우 조용하고 차분하게 문을 천천히 열었다.", "수진은 14살이었다. 그는 “가자.” 하고 말했다."];
@@ -26,11 +28,32 @@ const good: RawChapterPolishChange = {
 
 describe("③ 문장 다듬기", () => {
   it("시스템 프롬프트에 핵심 규칙이 들어 있다", () => {
-    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain(DATA_NOTICE);
-    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain("대사(따옴표 안)는 건드리지");
-    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain(`최대 ${MAX_CHAPTER_POLISH_CHANGES}건`);
-    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain("최대 20건");
-    expect(CHAPTER_POLISH_SYSTEM_PROMPT).toContain("수·나이·날짜");
+    const prompt = buildChapterPolishSystemPrompt("Lv6");
+    expect(prompt).toContain(DATA_NOTICE);
+    expect(prompt).toContain("대사(따옴표 안)는 건드리지");
+    expect(prompt).toContain(`최대 ${MAX_CHAPTER_POLISH_CHANGES}건`);
+    expect(prompt).toContain("최대 10건");
+    expect(prompt).toContain("수·나이·날짜");
+    expect(prompt).toContain("문장을 쪼개지 마세요");
+    expect(prompt).toContain("120자 이하의 문장은 길다는 이유만으로 고치지 마세요");
+    expect(prompt).toContain("은유");
+    expect(prompt).toContain("뜻이 약해지는 낱말로도 바꾸지 마세요");
+  });
+
+  it("레벨을 알면 그 레벨 독자와 어휘·문장구조 기준을 담고, 모르면 기준 블록 없이 같은 원칙만 가진다", () => {
+    const rubric = levelRubric("Lv6")!;
+    const prompt = buildChapterPolishSystemPrompt("Lv6");
+    expect(prompt).toContain(rubric.reader);
+    expect(prompt).toContain(rubric.vocabulary);
+    expect(buildChapterPolishSystemPrompt("Lv3")).toContain(levelRubric("Lv3")!.vocabulary);
+    expect(buildChapterPolishSystemPrompt("Lv3")).not.toContain(rubric.vocabulary);
+
+    for (const unknown of ["Lv9", ""]) {
+      const generic = buildChapterPolishSystemPrompt(unknown);
+      expect(generic).not.toContain("[레벨 기준");
+      expect(generic).toContain("문장을 쪼개지 마세요");
+      expect(generic).toContain("최대 10건");
+    }
   });
 
   it("요청문에 장 번호와 지시가 들어간다", () => {
@@ -38,6 +61,43 @@ describe("③ 문장 다듬기", () => {
     expect(task).toContain("3장 전체 문단");
     expect(task).toContain("더 짧게");
     expect(buildChapterPolishTask({ chapterNumber: 3 })).not.toContain("지시:");
+  });
+
+  it("대상 문장이 있으면 [반드시 손볼 문장] 블록에 문단 번호와 함께 싣고, 없거나 비면 블록이 없다", () => {
+    const task = buildChapterPolishTask({
+      chapterNumber: 3,
+      targets: [
+        { paragraphNumber: 2, sentence: "긴 문장 하나." },
+        { paragraphNumber: 5, sentence: "긴 문장 둘." },
+      ],
+    });
+    expect(task).toContain("[반드시 손볼 문장]");
+    expect(task).toContain("- 2문단: 긴 문장 하나.");
+    expect(task).toContain("- 5문단: 긴 문장 둘.");
+    expect(buildChapterPolishTask({ chapterNumber: 3 })).not.toContain("[반드시 손볼 문장]");
+    expect(buildChapterPolishTask({ chapterNumber: 3, targets: [] })).not.toContain("[반드시 손볼 문장]");
+  });
+
+  describe("findLongSentences", () => {
+    const sentence = (n: number) => "가".repeat(n - 1) + "."; // 마침표 포함 n자
+
+    it("120자를 넘는 문장만 문단 번호(1부터)와 함께 찾는다 — 정확히 120자는 제외", () => {
+      const paragraphs = [`${sentence(120)} ${sentence(121)}`, sentence(50), `${sentence(30)} ${sentence(150)}`];
+      expect(findLongSentences(paragraphs)).toEqual([
+        { paragraphNumber: 1, sentence: sentence(121) },
+        { paragraphNumber: 3, sentence: sentence(150) },
+      ]);
+    });
+
+    it("따옴표 글자가 든 긴 문장은 제외한다", () => {
+      expect(findLongSentences([`${"가".repeat(130)} “대사” 나나나나나.`])).toEqual([]);
+      expect(findLongSentences([`${"가".repeat(130)}'나.`])).toEqual([]);
+    });
+
+    it("? ! 뒤 공백으로도 문장을 나누고, 120자 이하만 있으면 빈 배열", () => {
+      expect(findLongSentences([`${"가".repeat(70)}? ${"나".repeat(70)}!`])).toEqual([]);
+      expect(findLongSentences([])).toEqual([]);
+    });
   });
 
   describe("validateChapterPolish", () => {
@@ -77,7 +137,7 @@ describe("③ 문장 다듬기", () => {
       ["before와 after가 같음", { ...good, after: good.before }],
       ["after에 빈 줄", { ...good, after: "가\n\n나" }],
       ["before가 14살 → after 16살", { paragraphNumber: 2, before: "14살", after: "16살", reason: "r" }],
-      ["after가 before의 120% 초과", { ...good, before: "문을 ", after: "문을 아주 천천히 " }],
+      ["after가 before의 120% 초과이면서 8자도 넘게 늘어남", { ...good, before: "문을 ", after: "문을 아주아주 매우 천천히 조용하게 아주 " }],
       ...["“", "”", '"', "'", "‘", "’", "「", "」"].map((q): [string, RawChapterPolishChange] => [
         `after에 ${q}`,
         { ...good, after: `${q}` },
@@ -105,6 +165,15 @@ describe("③ 문장 다듬기", () => {
       expect(validateChapterPolish([{ paragraphNumber: 1, before, after: "", reason: "r" }], [paragraph]).changes).toEqual([]);
     });
 
+    it("길이 가드: 120% 이하는 통과, 120%를 넘어도 8자 이하로 늘면 통과, 120%를 넘고 8자도 넘게 늘면 버린다", () => {
+      const paragraphs = ["그녀는 얇은 트레이싱지 위에 크로키를 했다."];
+      const make = (before: string, after: string) =>
+        validateChapterPolish([{ paragraphNumber: 1, before, after, reason: "r" }], paragraphs).changes;
+      expect(make("트레이싱지", "얇은 종이")).toHaveLength(1); // 120% 이하
+      expect(make("크로키", "빠르게 그린 스케치도")).toHaveLength(1); // 3자 → 11자: 120% 초과, 정확히 +8
+      expect(make("크로키", "빠르게 그린 스케치그림")).toEqual([]); // 3자 → 12자: 120% 초과, +9
+    });
+
     it("같은 문단 안에서 겹치는 두 번째 항목은 버린다", () => {
       const second = { ...good, before: "매우 조용하고 ", after: "" };
       const { changes, received } = validateChapterPolish([good, second], P);
@@ -113,19 +182,19 @@ describe("③ 문장 다듬기", () => {
       expect(received).toBe(2);
     });
 
-    it("장당 20건에서 자른다 (유효 21건을 세 문단에 나눠 줘서 장 한도가 걸리게 한다)", () => {
-      const words = Array.from({ length: 21 }, (_, i) => `단어${String.fromCharCode(0xac00 + i)}`);
-      const paragraphs = [0, 1, 2].map((p) => words.slice(p * 7, p * 7 + 7).join(" 그리고 ") + " 끝.");
+    it("장당 10건에서 자른다 (유효 11건을 세 문단에 나눠 줘서 장 한도가 걸리게 한다)", () => {
+      const words = Array.from({ length: 11 }, (_, i) => `단어${String.fromCharCode(0xac00 + i)}`);
+      const paragraphs = [0, 1, 2].map((p) => words.slice(p * 4, p * 4 + 4).join(" 그리고 ") + " 끝.");
       const raw: RawChapterPolishChange[] = words.map((w, i) => ({
-        paragraphNumber: Math.floor(i / 7) + 1,
+        paragraphNumber: Math.floor(i / 4) + 1,
         before: `${w} `,
         after: "",
         reason: "r",
       }));
       const result = validateChapterPolish(raw, paragraphs);
-      expect(result.received).toBe(21);
+      expect(result.received).toBe(11);
       expect(result.changes).toHaveLength(MAX_CHAPTER_POLISH_CHANGES);
-      expect(result.changes.map((c) => c.before)).toEqual(raw.slice(0, 20).map((r) => r.before));
+      expect(result.changes.map((c) => c.before)).toEqual(raw.slice(0, 10).map((r) => r.before));
     });
   });
 
