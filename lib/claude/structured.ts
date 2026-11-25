@@ -4,6 +4,9 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
 import type { ChatEvent, ChatMessage } from "@/lib/chatProtocol";
 import { buildChatMessages } from "./chatMessages";
+import { ClaudeCallError } from "./callError";
+
+export { ClaudeCallError };
 
 export const CLAUDE_REVIEW_MODEL = "claude-sonnet-5-5";
 
@@ -12,9 +15,6 @@ function getClient(): Anthropic {
   client ??= new Anthropic();
   return client;
 }
-
-/** 화면에 그대로 보여줘도 되는 메시지를 가진 오류. */
-export class ClaudeCallError extends Error {}
 
 function toCallError(err: unknown): ClaudeCallError {
   if (err instanceof ClaudeCallError) return err;
