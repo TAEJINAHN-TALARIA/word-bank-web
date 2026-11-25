@@ -28,6 +28,7 @@ describe("suggestIdeas", () => {
     expect(ideas).toEqual([{ title: "젖지 않은 우산", sketch: "물이 안 떨어진다", link: "7장" }]);
     const call = mockCall.mock.calls[0][0];
     expect(call.system).toBe(IDEAS_SYSTEM_PROMPT);
+    expect(call.label).toBe("suggestIdeas");
     expect(call.effort).toBe("medium");
     expect(call.context).toContain("[2] 하늘이 흐렸다.");
     expect(call.task).toContain("1장 2문단");
@@ -173,6 +174,7 @@ describe("polishChapter", () => {
     });
     const call = mockCall.mock.calls[0][0];
     expect(call.system).toBe(CHAPTER_POLISH_SYSTEM_PROMPT);
+    expect(call.label).toBe("polishChapter");
     expect(call.effort).toBe("medium");
     expect(call.context).toContain("[2] 하늘이 흐렸다.");
     expect(call.task).toContain("1장 전체 문단");

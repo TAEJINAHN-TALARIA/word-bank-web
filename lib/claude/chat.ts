@@ -4,7 +4,7 @@ import { CHAT_LIMITS, type ChatEvent, type ChatLimit, type ChatMessage } from "@
 import { isValidChaptersInput, MAX_TITLE_CHARS, type MasterChapter } from "@/lib/masterReview";
 import { buildChatSystemPrompt, buildStoryContext } from "./editing";
 import type { EditorContextInput } from "./editor";
-import { streamConversation } from "./structured";
+import { reviewProvider, streamConversation } from "./structured";
 
 export type ChatRequest = {
   mode: "review" | "published";
@@ -77,6 +77,6 @@ export function streamChat(
     effort: "medium",
     signal: input.signal,
     // 토큰 수만 남긴다(본문·제목은 남기지 않는다). 범위별 입력량과 캐시 적중량을 Vercel 로그에서 비교한다.
-    onUsage: (usage) => console.info("[editor-chat] usage", { scope: input.limitTo ? "paragraph" : "full", ...usage }),
+    onUsage: (usage) => console.info("[editor-chat] usage", { scope: input.limitTo ? "paragraph" : "full", provider: reviewProvider(), ...usage }),
   });
 }

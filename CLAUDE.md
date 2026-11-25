@@ -31,7 +31,7 @@ Word Bank 앱의 소개(랜딩) 페이지 + 개인정보처리방침 페이지, 
 
 ## 주의사항
 
-- 편집 화면의 Claude 기능(대화·전체 점검·사전 검토)은 `ANTHROPIC_API_KEY`가 필요하다. Vercel에는 **Production에만** 등록돼 있어 Preview 배포에서는 동작하지 않는다. 로컬에서 쓰려면 `.env.local`에 추가한다(`.env*`는 gitignore). Vercel 프로젝트는 Hobby 플랜 + Fluid Compute(함수 최대 300초)다.
+- 편집 화면의 Claude 기능(대화·전체 점검·사전 검토)은 `ANTHROPIC_API_KEY`가 필요하다. Vercel에는 **Production에만** 등록돼 있어 Preview 배포에서는 동작하지 않는다. 로컬에서 쓰려면 `.env.local`에 추가한다(`.env*`는 gitignore). Vercel 프로젝트는 Hobby 플랜 + Fluid Compute(함수 최대 300초)다. `REVIEW_PROVIDER=openai`이면 편집 AI 호출(구조화 7개 + 대화 스트림)이 OpenAI(`lib/claude/openai.ts`, `gpt-6.1-terra`, `OPENAI_API_KEY`)로 간다. 기본은 Claude이고, 되돌릴 때는 환경변수를 지우고 재배포한다. 호출별 사용량은 `[editor-call] usage`(`label`·`provider`), 대화는 `[editor-chat] usage` 로그로 본다.
 - 영어 번역(특히 `messages/en.json`의 `Privacy` 섹션)은 초벌 번역이며 배포 전 사용자 직접 검수가 필요하다 (법적 문서라 정확도가 중요함).
 - Vitest가 설치돼 있다(`npm run test`). 검증은 `npm run lint` + `npm run test` + `npm run build`로 하고, 관리자 대시보드처럼 실제 로그인/Firestore 데이터가 필요한 화면은 수동/curl 기반 동작 확인을 추가한다. 이 프로젝트엔 컴포넌트 렌더링 테스트 인프라(jsdom/React Testing Library)가 없다 — `lib/data/`·`lib/actions/`의 순수 로직만 Vitest로 테스트한다.
 - 관리자 대시보드를 로컬에서 띄우려면 `.env.local`에 Firebase Web SDK 설정 4개, `FIREBASE_ADMIN_KEY_BASE64`, `ADMIN_API_SHARED_SECRET`, `STORY_GENERATOR_FUNCTIONS_BASE_URL`이 모두 필요하다(`.env.example` 참고). 관리자 권한 부여는 Firebase Auth custom claim `admin: true`를 해당 계정에 직접 설정해야 한다(콘솔/Admin SDK).

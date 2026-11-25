@@ -5,10 +5,19 @@ import type { z } from "zod";
 import type { ChatEvent, ChatMessage } from "@/lib/chatProtocol";
 import { buildChatMessages } from "./chatMessages";
 import { ClaudeCallError } from "./callError";
+import { callStructuredOpenAI, streamConversationOpenAI } from "./openai";
 
 export { ClaudeCallError };
 
 export const CLAUDE_REVIEW_MODEL = "claude-sonnet-5-5";
+
+/**
+ * 편집 AI 호출이 갈 곳. `REVIEW_PROVIDER=openai`일 때만 OpenAI이고 그 밖에는 Claude다.
+ * 되돌릴 때는 환경변수를 지우고 재배포한다.
+ */
+export function reviewProvider(): "anthropic" | "openai" {
+  return process.env.REVIEW_PROVIDER === "openai" ? "openai" : "anthropic";
+}
 
 let client: Anthropic | undefined;
 function getClient(): Anthropic {
@@ -36,7 +45,11 @@ export async function callStructured<T extends z.ZodType>(input: {
   system: string;
   context: string;
   task: string;
+  // 사용량 로그에서 어느 호출인지 알아보는 이름.
+  label?: string;
 }): Promise<z.output<T>> {
+  if (reviewProvider() === "openai") return callStructuredOpenAI(input);
+
   let response;
   try {
     response = await getClient().beta.messages.parse({
@@ -58,6 +71,20 @@ export async function callStructured<T extends z.ZodType>(input: {
     });
   } catch (err) {
     throw toCallError(err);
+  }
+
+  // 토큰 수만 남긴다(본문·제목은 남기지 않는다). 호출별 입력량과 캐시 적중량을 Vercel 로그에서 비교한다.
+  const { usage } = response;
+  if (usage) {
+    console.info("[editor-call] usage", {
+      label: input.label,
+      provider: "anthropic",
+      effort: input.effort,
+      input_tokens: usage.input_tokens,
+      output_tokens: usage.output_tokens,
+      cache_creation_input_tokens: usage.cache_creation_input_tokens,
+      cache_read_input_tokens: usage.cache_read_input_tokens,
+    });
   }
 
   if (response.stop_reason === "refusal") throw new ClaudeCallError("Claude가 이 요청을 처리하지 못했습니다 (정책상 거절)");
@@ -105,6 +132,11 @@ export async function* streamConversation(
   },
   client?: ConversationClient,
 ): AsyncGenerator<ChatEvent> {
+  // 가짜 클라이언트를 직접 넘기는 것은 Claude 경로의 테스트뿐이다.
+  if (!client && reviewProvider() === "openai") {
+    yield* streamConversationOpenAI(input);
+    return;
+  }
   try {
     const conversation = client ?? (getClient() as unknown as ConversationClient);
     const stream = conversation.beta.messages.stream(

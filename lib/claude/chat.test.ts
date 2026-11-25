@@ -158,11 +158,12 @@ describe("streamChat", () => {
 
   it("사용량은 범위와 함께 토큰 수만 로그로 남긴다", async () => {
     const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    vi.mocked(structured.reviewProvider).mockReturnValue("openai");
     const usage = { input_tokens: 10, output_tokens: 5, cache_creation_input_tokens: 0, cache_read_input_tokens: 7 };
     (await run({ chapterNumber: 1, paragraphIndex: 0 })).onUsage?.(usage);
-    expect(info).toHaveBeenLastCalledWith("[editor-chat] usage", { scope: "paragraph", ...usage });
+    expect(info).toHaveBeenLastCalledWith("[editor-chat] usage", { scope: "paragraph", provider: "openai", ...usage });
     (await run()).onUsage?.(usage);
-    expect(info).toHaveBeenLastCalledWith("[editor-chat] usage", { scope: "full", ...usage });
+    expect(info).toHaveBeenLastCalledWith("[editor-chat] usage", { scope: "full", provider: "openai", ...usage });
     info.mockRestore();
   });
 });

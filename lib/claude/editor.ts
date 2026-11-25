@@ -58,6 +58,7 @@ export async function suggestIdeas(
 ): Promise<Idea[]> {
   const paragraph = paragraphOf(input, input.chapterNumber, input.paragraphIndex);
   const raw = await callStructured({
+    label: "suggestIdeas",
     schema: ideasSchema,
     effort: "medium",
     system: IDEAS_SYSTEM_PROMPT,
@@ -79,6 +80,7 @@ export async function polishParagraph(
 ): Promise<PolishChange[]> {
   const draft = paragraphOf(input, input.chapterNumber, input.paragraphIndex);
   const raw = await callStructured({
+    label: "polishParagraph",
     schema: polishSchema,
     effort: "medium",
     system: POLISH_SYSTEM_PROMPT,
@@ -102,6 +104,7 @@ export async function suggestStructure(
   const chapter = input.chapters.find((c) => c.chapterNumber === input.chapterNumber);
   if (!chapter) throw new Error(`${input.chapterNumber}장을 찾을 수 없습니다`);
   const raw = await callStructured({
+    label: "suggestStructure",
     schema: structureSchema,
     effort: "medium",
     system: STRUCTURE_SYSTEM_PROMPT,
@@ -120,6 +123,7 @@ export async function reviewStory(
   input: EditorContextInput & { kind: StoryReviewKind; instruction?: string },
 ): Promise<StoryReviewResult> {
   const raw = await callStructured({
+    label: "reviewStory",
     schema: storyReviewSchema,
     effort: "high",
     system: SYSTEM_PROMPT,
@@ -134,6 +138,7 @@ export async function reviewStory(
 
 export async function generatePreReview(input: EditorContextInput): Promise<PreReviewItem[]> {
   const raw = await callStructured({
+    label: "generatePreReview",
     schema: preReviewSchema,
     effort: "high",
     system: SYSTEM_PROMPT,
@@ -150,6 +155,7 @@ export async function polishChapter(
   const chapter = input.chapters.find((c) => c.chapterNumber === input.chapterNumber);
   if (!chapter) throw new Error(`${input.chapterNumber}장을 찾을 수 없습니다`);
   const raw = await callStructured({
+    label: "polishChapter",
     schema: chapterPolishSchema,
     effort: "medium",
     system: CHAPTER_POLISH_SYSTEM_PROMPT,
@@ -162,6 +168,7 @@ export async function polishChapter(
 // 전처리 ④ 사실관계 점검 — 모순은 장을 가로질러야 보이므로 원고 전체를 한 번에 읽는다.
 export async function checkFacts(input: EditorContextInput): Promise<FactFinding[]> {
   const raw = await callStructured({
+    label: "checkFacts",
     schema: factsSchema,
     effort: "high",
     system: FACTS_SYSTEM_PROMPT,
