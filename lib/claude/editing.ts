@@ -147,7 +147,7 @@ export function validateIdeas(raw: Idea[]): Idea[] {
     .map((i) => ({ title: i.title.trim(), sketch: i.sketch.trim(), link: i.link.trim() || "연결 정보 없음" }))
     .filter((i) => i.title && i.sketch)
     .slice(0, 3);
-  if (!ideas.length) throw new Error("Claude가 쓸 수 있는 아이디어를 돌려주지 않았습니다");
+  if (!ideas.length) throw new Error("AI가 쓸 수 있는 아이디어를 돌려주지 않았습니다");
   return ideas;
 }
 

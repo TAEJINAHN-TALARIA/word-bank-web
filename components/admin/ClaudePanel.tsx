@@ -119,8 +119,8 @@ export function ClaudePanel({
         <TabsContent value="notes" className="flex flex-col gap-3">
           {mode === "review" && (
             <section aria-label="사전 검토 메모" className="flex flex-col gap-2 rounded-xl border border-border bg-card px-4 py-3">
-              <h3 className="text-sm font-semibold">Claude 사전 검토 메모 · 남은 {memos.length}건</h3>
-              {memosLoading && <p className="text-sm text-muted-foreground">Claude가 먼저 읽고 있어요…</p>}
+              <h3 className="text-sm font-semibold">AI 사전 검토 메모 · 남은 {memos.length}건</h3>
+              {memosLoading && <p className="text-sm text-muted-foreground">AI가 먼저 읽고 있어요…</p>}
               {memosError && <InlineError message={memosError} />}
               {!memosLoading && !memosError && memos.length === 0 && (
                 <p className="text-sm text-muted-foreground">남은 메모가 없어요.</p>
@@ -199,7 +199,7 @@ export function ClaudePanel({
                 }}
               >
                 <input
-                  aria-label="Claude에게 보낼 점검 요청"
+                  aria-label="AI에게 보낼 점검 요청"
                   placeholder="예: 결말이 급한지 봐줘"
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}

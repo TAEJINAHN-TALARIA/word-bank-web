@@ -164,7 +164,7 @@ export function ParagraphWorkspace({
           <section aria-labelledby="ws-ideas" className="flex flex-col gap-2.5 border-t border-border pt-4">
             <div className="flex flex-wrap items-center gap-2">
               <span aria-hidden className="flex size-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">1</span>
-              <h3 id="ws-ideas" className="min-w-28 flex-1 text-sm font-semibold">Claude의 방향 제안</h3>
+              <h3 id="ws-ideas" className="min-w-28 flex-1 text-sm font-semibold">AI의 방향 제안</h3>
               <Button type="button" variant="outline" className={cn(touch, "border-primary text-primary")} disabled={busy} onClick={askIdeas}>
                 {ideasLoading ? "제안 중…" : ideas ? "다시 제안 받기" : "방향 제안 받기"}
               </Button>
@@ -273,7 +273,7 @@ export function ParagraphWorkspace({
             className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-50"
           />
           <Button type="button" className="h-12 self-start px-5 text-sm font-semibold" disabled={busy || !text.trim()} onClick={askPolish}>
-            {polishLoading ? "다듬는 중…" : "Claude에게 다듬기 요청"}
+            {polishLoading ? "다듬는 중…" : "AI에게 다듬기 요청"}
           </Button>
           {polishError && <InlineError message={polishError} />}
         </section>

@@ -90,7 +90,7 @@ export function EditorChat({
   }
 
   return (
-    <section aria-label="Claude와 대화" className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3">
+    <section aria-label="AI와 대화" className="flex flex-col gap-3 rounded-xl border border-border bg-card px-4 py-3">
       {showTargets && (
         <div role="group" aria-label="대화 대상" className="flex flex-wrap gap-1.5">
           {TARGETS.map((t) => (
@@ -134,7 +134,7 @@ export function EditorChat({
       <div ref={listRef} role="log" aria-live="polite" className="flex max-h-[28rem] min-h-24 flex-col gap-2 overflow-y-auto">
         {turns.length === 0 && (
           <p className="rounded-lg bg-muted px-3 py-2.5 text-sm leading-relaxed text-muted-foreground">
-            이 글에 대해 무엇이든 물어보세요. Claude는 고칠 곳을 제안만 하고, 본문은 바꾸지 않아요.
+            이 글에 대해 무엇이든 물어보세요. AI는 고칠 곳을 제안만 하고, 본문은 바꾸지 않아요.
           </p>
         )}
         {turns.map((turn, i) => {
@@ -166,7 +166,7 @@ export function EditorChat({
         }}
       >
         <textarea
-          aria-label="Claude에게 보낼 메시지"
+          aria-label="AI에게 보낼 메시지"
           placeholder="예: 이 문단 긴장감이 약한가?"
           rows={3}
           maxLength={3500}

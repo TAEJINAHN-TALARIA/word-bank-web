@@ -62,7 +62,7 @@ export function FullReadView({
                   className={`block w-full rounded-md px-2.5 py-1.5 text-left ${memo ? "bg-amber-50" : edited ? "bg-primary/10" : "bg-transparent"}`}
                 >
                   <span className="block font-serif text-lg leading-loose">{paragraph}</span>
-                  {memo && <span className="mt-1 inline-block text-xs font-medium text-amber-800">Claude 메모 · {memo}</span>}
+                  {memo && <span className="mt-1 inline-block text-xs font-medium text-amber-800">AI 메모 · {memo}</span>}
                 </button>
               );
             })}

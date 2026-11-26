@@ -595,7 +595,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
               <>
                 {isReview && (
                   <Button type="button" size="lg" variant="outline" aria-pressed={showMemos} onClick={() => setShowMemos((v) => !v)}>
-                    Claude 메모 표시
+                    AI 메모 표시
                   </Button>
                 )}
                 <Button type="button" size="lg" variant="outline" aria-pressed={showEdits} onClick={() => setShowEdits((v) => !v)}>
@@ -760,7 +760,7 @@ export function MasterEditor({ detail }: { detail: EditorDetail }) {
         <div className="flex min-w-72 flex-1 flex-col gap-1">
           <p className="text-sm font-semibold">
             {isReview ? `확인 ${confirmed.length}/${chapters.length} · ` : ""}수정 {editedCount}곳
-            {isReview && ` · 남은 Claude 메모 ${memos.length}건`}
+            {isReview && ` · 남은 AI 메모 ${memos.length}건`}
           </p>
           <p className="text-sm leading-relaxed text-muted-foreground">
             {isReview
