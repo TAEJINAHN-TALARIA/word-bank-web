@@ -12,11 +12,16 @@ const input = { schema, effort: "high" as const, system: "시스템 지시", con
 
 type Body = Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-function fakeFetch(response: { ok?: boolean; status?: number; json: unknown }) {
+function fakeFetch(response: { ok?: boolean; status?: number; json: unknown; text?: string }) {
   const calls: { url: string; init: { headers: Record<string, string>; body: string } }[] = [];
   const impl = (async (url: string, init: { headers: Record<string, string>; body: string }) => {
     calls.push({ url, init });
-    return { ok: response.ok ?? true, status: response.status ?? 200, json: async () => response.json };
+    return {
+      ok: response.ok ?? true,
+      status: response.status ?? 200,
+      json: async () => response.json,
+      text: async () => response.text ?? JSON.stringify(response.json),
+    };
   }) as unknown as typeof fetch;
   return { impl, calls, body: (): Body => JSON.parse(calls[0].init.body) };
 }
@@ -108,6 +113,52 @@ describe("callStructuredOpenAI", () => {
       expect(err).toBeInstanceOf(ClaudeCallError);
       expect(err.message).toMatch(pattern);
     }
+  });
+
+  it("HTTP 오류의 응답 본문은 서버 로그에 남기고 화면 메시지에는 넣지 않는다", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const detail = "Unknown parameter: 'prompt_cache_options'";
+    const f = fakeFetch({ ok: false, status: 400, json: { error: { message: detail } } });
+    const err = await callStructuredOpenAI(input, f.impl).catch((e) => e);
+
+    expect(err.message).toBe("OpenAI API 오류 (400)");
+    expect(errorLog).toHaveBeenCalledTimes(1);
+    const logged = JSON.stringify(errorLog.mock.calls[0]);
+    expect(logged).toContain("400");
+    expect(logged).toContain(detail);
+    expect(logged).not.toContain("sk-test");
+    expect(logged).not.toContain(input.context);
+  });
+
+  it("오류 본문이 아주 길면 로그에는 앞부분만 남긴다", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const f = fakeFetch({ ok: false, status: 500, json: {}, text: "가".repeat(5000) });
+    await callStructuredOpenAI(input, f.impl).catch((e) => e);
+    expect(JSON.stringify(errorLog.mock.calls[0]).length).toBeLessThan(1000);
+  });
+
+  it("오류 본문을 읽지 못해도 원래 오류 메시지는 그대로다", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const impl = (async () => ({
+      ok: false,
+      status: 502,
+      json: async () => ({}),
+      text: async () => {
+        throw new Error("body stream broke");
+      },
+    })) as unknown as typeof fetch;
+    const err = await callStructuredOpenAI(input, impl).catch((e) => e);
+    expect(err).toBeInstanceOf(ClaudeCallError);
+    expect(err.message).toBe("OpenAI API 오류 (502)");
+  });
+
+  it("채팅 스트림도 HTTP 오류 본문을 서버 로그에 남긴다", async () => {
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => {});
+    const detail = "Invalid value for 'model'";
+    const impl = (async () => ({ ok: false, status: 400, text: async () => detail })) as unknown as typeof fetch;
+    const events = await collect(streamConversationOpenAI(chat, impl));
+    expect(events).toEqual([{ t: "error", message: "OpenAI API 오류 (400)" }]);
+    expect(JSON.stringify(errorLog.mock.calls)).toContain(detail);
   });
 
   it("fetch가 예외를 던져도 ClaudeCallError로 바꾼다", async () => {

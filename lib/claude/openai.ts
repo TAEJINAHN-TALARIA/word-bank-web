@@ -46,7 +46,16 @@ function requireKey(): string {
   return key;
 }
 
-function httpError(status: number): ClaudeCallError {
+const MAX_LOGGED_BODY = 500;
+
+/**
+ * HTTP 오류를 한국어 오류로 바꾼다. 요청 형식 문제(스키마·필드·모델 이름)는 응답 본문에만 이유가 있어서 앞부분을 서버 로그에 남긴다.
+ * 오류 본문에는 요청 내용(소설 본문)이 없고, 키는 헤더에만 있다. 본문을 읽지 못해도 원래 오류는 그대로 던진다.
+ */
+async function httpError(res: { status: number; text?: () => Promise<string> }): Promise<ClaudeCallError> {
+  const status = res.status;
+  const detail = await res.text?.().catch(() => "");
+  console.error("[editor-call] openai http error", { status, detail: (detail ?? "").slice(0, MAX_LOGGED_BODY) });
   if (status === 429) return new ClaudeCallError("요청이 많아 잠시 뒤에 다시 시도해 주세요");
   if (status === 401) return new ClaudeCallError("OpenAI API 인증에 실패했습니다 (OPENAI_API_KEY 확인)");
   return new ClaudeCallError(`OpenAI API 오류 (${status})`);
@@ -89,8 +98,8 @@ export async function callStructuredOpenAI<T extends z.ZodType>(
         text: { format: { type: "json_schema", name: "result", schema: jsonSchema, strict: true } },
       }),
     });
-    if (!res.ok) throw httpError(res.status);
-    body = (await res.json()) as ResponsesBody;
+    if (!res.ok) throw await httpError(res);
+    body =(await res.json()) as ResponsesBody;
   } catch (err) {
     throw err instanceof ClaudeCallError ? err : new ClaudeCallError(err instanceof Error ? err.message : "OpenAI 호출 실패");
   }
@@ -173,7 +182,7 @@ export async function* streamConversationOpenAI(
       }),
       signal: input.signal,
     });
-    if (!res.ok) throw httpError(res.status);
+    if (!res.ok) throw await httpError(res);
     if (!res.body) throw new ClaudeCallError("AI 응답을 받지 못했습니다");
 
     const reader = res.body.getReader();
