@@ -209,6 +209,40 @@ describe("polishChapter", () => {
     expect(call.task).toContain(`- 2문단: ${longSentence}`);
   });
 
+  it("[반드시 손볼 문장]은 가장 긴 것부터 장당 한도(10건)까지만 싣는다", async () => {
+    const sentence = (n: number) => "가".repeat(n - 1) + ".";
+    const paragraphs = Array.from({ length: 12 }, (_, i) => sentence(121 + i)); // 12개, 길이 121~132
+    mockCall.mockResolvedValueOnce({ changes: [] });
+
+    await polishChapter({ ...base, chapters: [{ chapterNumber: 1, chapterTitle: "첫째", paragraphs }], chapterNumber: 1 });
+
+    const task: string = mockCall.mock.calls[0][0].task;
+    expect(task.match(/^- \d+문단: /gm)).toHaveLength(10);
+    expect(task).not.toContain(`- 1문단: ${paragraphs[0]}`); // 가장 짧은 둘(121, 122자)은 빠진다
+    expect(task).not.toContain(`- 2문단: ${paragraphs[1]}`);
+    expect(task).toContain(`- 12문단: ${paragraphs[11]}`);
+  });
+
+  it("대상 문장을 건드리는 항목은 장당 한도에서 잘리지 않고 남는다", async () => {
+    // 1·2문단에 대상이 아닌 항목 5개씩(문단당 8건 한도 아래), 3문단(대상 문장)에 항목 1개. 앞에서부터 자르면 대상 항목이 잘린다.
+    const words = Array.from({ length: 10 }, (_, i) => `단어${String.fromCharCode(0xac00 + i)}`);
+    const target = "유일한수식어 " + "가나다 ".repeat(40) + "끝.";
+    expect(target.length).toBeGreaterThan(120);
+    const paragraphs = [`${words.slice(0, 5).join(" 그리고 ")} 끝.`, `${words.slice(5).join(" 그리고 ")} 끝.`, target];
+    mockCall.mockResolvedValueOnce({
+      changes: [
+        ...words.map((w, i) => ({ paragraphNumber: i < 5 ? 1 : 2, before: `${w} `, after: "", reason: "r" })),
+        { paragraphNumber: 3, before: "유일한수식어 ", after: "", reason: "r" },
+      ],
+    });
+
+    const result = await polishChapter({ ...base, chapters: [{ chapterNumber: 1, chapterTitle: "첫째", paragraphs }], chapterNumber: 1 });
+
+    expect(result.received).toBe(11);
+    expect(result.changes).toHaveLength(10);
+    expect(result.changes.map((c) => c.before)).toContain("유일한수식어 ");
+  });
+
   it("없는 장이면 Claude를 부르지 않고 오류를 던진다", async () => {
     await expect(polishChapter({ ...base, chapterNumber: 9 })).rejects.toThrow();
     expect(mockCall).not.toHaveBeenCalled();

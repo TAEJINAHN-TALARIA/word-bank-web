@@ -26,6 +26,7 @@ import {
 import {
   DIALOGUE_CHECK_SYSTEM_PROMPT,
   FACTS_SYSTEM_PROMPT,
+  MAX_CHAPTER_POLISH_CHANGES,
   STYLE_CHECK_SYSTEM_PROMPT,
   buildChapterPolishSystemPrompt,
   buildChapterPolishTask,
@@ -33,6 +34,7 @@ import {
   buildFactsTask,
   buildStyleCheckTask,
   findLongSentences,
+  limitLongSentences,
   validateChapterPolish,
   validateCheckFindings,
   validateFactFindings,
@@ -160,19 +162,17 @@ export async function polishChapter(
 ): Promise<ChapterPolishResult> {
   const chapter = input.chapters.find((c) => c.chapterNumber === input.chapterNumber);
   if (!chapter) throw new Error(`${input.chapterNumber}장을 찾을 수 없습니다`);
+  // 결과 상한(장당 10건)보다 많이 건네 봐야 모델이 앞쪽만 처리하므로, 가장 긴 문장부터 상한까지만 건넨다.
+  const targets = limitLongSentences(findLongSentences(chapter.paragraphs), MAX_CHAPTER_POLISH_CHANGES);
   const raw = await callStructured({
     label: "polishChapter",
     schema: chapterPolishSchema,
     effort: "medium",
     system: buildChapterPolishSystemPrompt(input.level),
     context: buildStoryContext(input),
-    task: buildChapterPolishTask({
-      chapterNumber: input.chapterNumber,
-      instruction: input.instruction,
-      targets: findLongSentences(chapter.paragraphs),
-    }),
+    task: buildChapterPolishTask({ chapterNumber: input.chapterNumber, instruction: input.instruction, targets }),
   });
-  return validateChapterPolish(raw.changes, chapter.paragraphs);
+  return validateChapterPolish(raw.changes, chapter.paragraphs, targets);
 }
 
 // 전처리 ④ 사실관계 점검 — 모순은 장을 가로질러야 보이므로 원고 전체를 한 번에 읽는다.

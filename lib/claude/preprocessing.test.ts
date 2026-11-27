@@ -4,6 +4,8 @@ import {
   buildChapterPolishSystemPrompt,
   buildChapterPolishTask,
   findLongSentences,
+  limitLongSentences,
+  spokenNumbers,
   validateChapterPolish,
   applyChapterPolish,
   type RawChapterPolishChange,
@@ -83,6 +85,69 @@ describe("③ 문장 다듬기", () => {
     expect(buildChapterPolishTask({ chapterNumber: 3, targets: [] })).not.toContain("[반드시 손볼 문장]");
   });
 
+  describe("덜어내는 순서·보호 항목·예시 (프롬프트)", () => {
+    // 레벨 기준이 있는 프롬프트와 없는 프롬프트 모두에 같은 원칙이 실린다.
+    const prompts = [buildChapterPolishSystemPrompt("Lv3"), buildChapterPolishSystemPrompt("")];
+
+    it.each(prompts)("덜어내는 순서가 부사 → 겹친 꾸밈 → 다시 설명 → 꾸미는 절 → 비유·감각어 순으로 적혀 있다", (prompt) => {
+      // 규칙 본문("아래 [덜어내는 순서]대로")과 레벨 기준표에도 같은 낱말이 나오므로, 제목 줄로 시작하는 순서 블록 안에서만 찾는다.
+      const start = prompt.indexOf("\n[덜어내는 순서]\n");
+      expect(start).toBeGreaterThanOrEqual(0);
+      const block = prompt.slice(start);
+      const order = ["정도·강조 부사", "같은 방향의 꾸밈", "다시 설명하는 말", "꾸미는 절", "비유와 감각어"].map((k) => block.indexOf(k));
+      expect(order.every((i) => i >= 0)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+      expect(block).toContain("앞 단계만으로 충분하면 뒤 단계는 건드리지 마세요");
+    });
+
+    it.each(prompts)("보호 항목: 인물을 드러내는 행동 묘사는 지우지 않고, 장면의 핵심 감각어 하나는 남긴다", (prompt) => {
+      expect(prompt).toContain("인물을 드러내는 행동 묘사");
+      expect(prompt).toContain("핵심 감각어 하나는 남기세요");
+    });
+
+    it.each(prompts)("예시와 잘못된 예시가 실려 있다", (prompt) => {
+      expect(prompt).toContain("[예시]");
+      expect(prompt).toContain("before: 먼지를 단정한 손놀림으로 털어냈다");
+      expect(prompt).toContain("after: 먼지를 털어냈다");
+      expect(prompt).toContain("[잘못된 예시: 하지 말 것]");
+      expect(prompt).toContain("before: 허리를 곧게 펴고 코트 자락에 묻은 먼지를");
+    });
+
+    it("기존 금지 규칙과 '가장 무거운 한 겹' 선택 대신 순서를 따르라고 말한다", () => {
+      const prompt = buildChapterPolishSystemPrompt("Lv3");
+      expect(prompt).toContain("뜻이 약해지는 낱말로도 바꾸지 마세요");
+      expect(prompt).toContain("문장을 쪼개지 마세요");
+      expect(prompt).not.toContain("가장 무거운 꾸밈 한 겹이나 한 덩어리");
+      expect(buildChapterPolishTask({ chapterNumber: 1, targets: [{ paragraphNumber: 1, sentence: "긴." }] })).toContain("덜어내는 순서");
+    });
+  });
+
+  describe("spokenNumbers", () => {
+    it.each([
+      ["삼 년 동안", ["삼 년"]],
+      ["열네 살이었다", ["열네 살"]],
+      ["스물두 명이 왔다", ["스물두 명"]],
+      ["대여섯 명이 모였다", ["대여섯 명"]],
+      ["이틀 뒤에 떠났다", ["이틀"]],
+      ["백 리터를 길었다", ["백 리터"]],
+      ["수천 번을 반복했다", ["수천 번"]],
+      ["이층 우편함", ["이층"]],
+      ["등을 곧게 한 채 서 있었다", ["한 채"]], // 숫자 아닌 것도 잡는다 — 항목을 버리는 쪽으로만 틀린다
+    ])("%s", (text, expected) => {
+      expect(spokenNumbers(text)).toEqual(expected);
+    });
+
+    it("수 낱말이 없으면 빈 배열", () => {
+      expect(spokenNumbers("그녀는 조용히 문을 열었다.")).toEqual([]);
+      expect(spokenNumbers("열린 문 사이로 바람이 들었다.")).toEqual([]);
+    });
+
+    it("지시어 '이'(이 장면, 이 원고, 이 분)는 수로 보지 않는다. 띄어 쓰지 않은 '이층'과 다른 수 뒤의 '이'는 수다", () => {
+      expect(spokenNumbers("이 장면은 이 원고에서 이 분이 말했다.")).toEqual([]);
+      expect(spokenNumbers("십이 년 전 이층에서")).toEqual(["십이 년", "이층"]);
+    });
+  });
+
   describe("findLongSentences", () => {
     const sentence = (n: number) => "가".repeat(n - 1) + "."; // 마침표 포함 n자
 
@@ -102,6 +167,27 @@ describe("③ 문장 다듬기", () => {
     it("? ! 뒤 공백으로도 문장을 나누고, 120자 이하만 있으면 빈 배열", () => {
       expect(findLongSentences([`${"가".repeat(70)}? ${"나".repeat(70)}!`])).toEqual([]);
       expect(findLongSentences([])).toEqual([]);
+    });
+  });
+
+  describe("limitLongSentences", () => {
+    const item = (paragraphNumber: number, length: number) => ({ paragraphNumber, sentence: "가".repeat(length) });
+
+    it("max개 이하면 그대로 돌려준다", () => {
+      const found = [item(1, 130), item(2, 125)];
+      expect(limitLongSentences(found, 10)).toEqual(found);
+    });
+
+    it("max개를 넘으면 가장 긴 문장부터 남기고, 남은 것은 원고 순서로 돌려준다 (길이가 같으면 앞의 것이 먼저)", () => {
+      const found = [item(1, 121), item(2, 150), item(3, 130), item(4, 130), item(5, 125)];
+      expect(limitLongSentences(found, 3)).toEqual([item(2, 150), item(3, 130), item(4, 130)]);
+    });
+
+    it("입력 배열은 바꾸지 않는다", () => {
+      const found = [item(1, 121), item(2, 150), item(3, 130)];
+      const copy = [...found];
+      limitLongSentences(found, 1);
+      expect(found).toEqual(copy);
     });
   });
 
@@ -177,6 +263,93 @@ describe("③ 문장 다듬기", () => {
       expect(make("트레이싱지", "얇은 종이")).toHaveLength(1); // 120% 이하
       expect(make("크로키", "빠르게 그린 스케치도")).toHaveLength(1); // 3자 → 11자: 120% 초과, 정확히 +8
       expect(make("크로키", "빠르게 그린 스케치그림")).toEqual([]); // 3자 → 12자: 120% 초과, +9
+    });
+
+    describe("말로 쓴 수 보존", () => {
+      const paragraphs = ["그는 삼 년 동안 열네 살 소년을 키웠다. 대여섯 명이 모였고 이틀 뒤에 떠났다."];
+      const make = (before: string, after: string) =>
+        validateChapterPolish([{ paragraphNumber: 1, before, after, reason: "r" }], paragraphs).changes;
+
+      it.each([
+        ["삼 년", "오랜"],
+        ["열네 살 소년을", "소년을"],
+        ["대여섯 명이 모였고", "사람들이 모였고"],
+        ["이틀 뒤에", "곧"],
+        ["삼 년 동안 열네 살 소년을", "열네 살 소년을"], // 하나는 남아도 하나가 사라지면 버린다
+      ])("수 낱말이 사라지면 버린다: %s → %s", (before, after) => {
+        expect(make(before, after)).toEqual([]);
+      });
+
+      it("수 낱말이 그대로 남으면 통과한다", () => {
+        expect(make("삼 년 동안 ", "삼 년 ")).toHaveLength(1);
+        expect(make("열네 살 소년을", "열네 살 아이를")).toHaveLength(1);
+      });
+
+      it("띄어쓰기만 바뀐 것은 수가 남은 것으로 본다", () => {
+        expect(make("삼 년 동안", "삼년 동안")).toHaveLength(1);
+      });
+
+      it("수 낱말이 없는 구절은 영향을 받지 않는다", () => {
+        expect(make("그는 ", "")).toHaveLength(1);
+      });
+    });
+
+    describe("10건 자르기 우선순위: [반드시 손볼 문장]을 건드리는 항목을 먼저 남긴다", () => {
+      const words = Array.from({ length: 11 }, (_, i) => `단어${String.fromCharCode(0xac00 + i)}`);
+      const paragraphs = [0, 1, 2].map((p) => words.slice(p * 4, p * 4 + 4).join(" 그리고 ") + " 끝.");
+      const raw: RawChapterPolishChange[] = words.map((w, i) => ({
+        paragraphNumber: Math.floor(i / 4) + 1,
+        before: `${w} `,
+        after: "",
+        reason: "r",
+      }));
+
+      it("대상 문장에 걸린 마지막 항목이 앞의 비대상 항목 대신 남고, 남은 것은 원고 순서로 돌려준다", () => {
+        // 3문단(= 마지막 항목 셋이 있는 문단) 전체가 하나의 문장이다.
+        const targets = [{ paragraphNumber: 3, sentence: paragraphs[2] }];
+        const result = validateChapterPolish(raw, paragraphs, targets);
+        expect(result.changes).toHaveLength(MAX_CHAPTER_POLISH_CHANGES);
+        // 3문단의 세 항목이 모두 남고, 비대상 항목은 앞에서부터 7개만 남는다(raw[7]이 밀려난다).
+        const expected = [...raw.slice(0, 7), raw[8], raw[9], raw[10]];
+        expect(result.changes.map((c) => c.before)).toEqual(expected.map((r) => r.before));
+      });
+
+      it("대상이 없으면 지금처럼 앞에서부터 자른다", () => {
+        expect(validateChapterPolish(raw, paragraphs).changes.map((c) => c.before)).toEqual(raw.slice(0, 10).map((r) => r.before));
+        expect(validateChapterPolish(raw, paragraphs, []).changes.map((c) => c.before)).toEqual(raw.slice(0, 10).map((r) => r.before));
+      });
+
+      it("한도 안이면 순서를 바꾸지 않는다", () => {
+        const two = ["앞말 단어 하나. 뒷말 단어 둘."];
+        const items = [
+          { paragraphNumber: 1, before: "앞말 ", after: "", reason: "r" },
+          { paragraphNumber: 1, before: "뒷말 ", after: "", reason: "r" },
+        ];
+        const result = validateChapterPolish(items, two, [{ paragraphNumber: 1, sentence: "뒷말 단어 둘." }]);
+        expect(result.changes.map((c) => c.before)).toEqual(["앞말 ", "뒷말 "]);
+      });
+
+      it("같은 문단의 다른 문장에 있는 항목은 대상이 아니다 (문장 위치로 겹침을 본다)", () => {
+        const word = (prefix: string, i: number) => `${prefix}${String.fromCharCode(0xac00 + i)}`;
+        const p1Words = Array.from({ length: 6 }, (_, i) => word("앞", i));
+        const aWords = Array.from({ length: 5 }, (_, i) => word("가", i));
+        // 2문단: 앞 문장(항목 5개) + 대상 문장(항목 1개). 1문단은 대상이 아니다.
+        const paragraphs2 = [
+          `${p1Words.join(" 그리고 ")} 끝.`,
+          `${aWords.join(" 그리고 ")} 끝. 대상 문장의 뒷말 하나.`,
+        ];
+        const items = [
+          ...p1Words.map((w) => ({ paragraphNumber: 1, before: `${w} `, after: "", reason: "r" })),
+          ...aWords.map((w) => ({ paragraphNumber: 2, before: `${w} `, after: "", reason: "r" })),
+          { paragraphNumber: 2, before: "뒷말 ", after: "", reason: "r" },
+        ];
+        const result = validateChapterPolish(items, paragraphs2, [{ paragraphNumber: 2, sentence: "대상 문장의 뒷말 하나." }]);
+        const kept = result.changes.map((c) => c.before);
+        expect(kept).toHaveLength(MAX_CHAPTER_POLISH_CHANGES);
+        expect(kept).toContain("뒷말 "); // 우선 항목은 남는다
+        // 문단 단위로 봤다면 2문단 항목 6개가 모두 우선이라 1문단은 4개만 남는다. 문장 단위로 보면 1문단 6개가 다 남는다.
+        for (const w of p1Words) expect(kept).toContain(`${w} `);
+      });
     });
 
     it("같은 문단 안에서 겹치는 두 번째 항목은 버린다", () => {

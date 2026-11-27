@@ -23,6 +23,16 @@ export function findLongSentences(paragraphs: string[]): LongSentence[] {
   return found;
 }
 
+/**
+ * 대상 문장이 max개를 넘으면 가장 긴 문장부터 max개만 남긴다(길이가 같으면 앞의 것). 남긴 것은 원고 순서로 돌려준다.
+ * 목록이 길면 모델이 앞쪽만 처리하고, 결과 상한(장당 10건)보다 많이 건네 봐야 소용이 없다.
+ */
+export function limitLongSentences(found: LongSentence[], max: number): LongSentence[] {
+  if (found.length <= max) return found;
+  const keep = new Set([...found].sort((a, b) => b.sentence.length - a.sentence.length).slice(0, max));
+  return found.filter((s) => keep.has(s));
+}
+
 // 장 전체를 그 레벨 독자가 막힐 곳만 마일드하게 손본다. 문단마다 고칠 구절 목록만 돌려받고, 대사·사실·문체·문장 모양은 건드리지 않는다.
 // 레벨 기준표(levelRubric)를 아는 레벨이면 기준 블록을 싣는다. 파일럿은 Lv6에서만 돌렸다.
 export function buildChapterPolishSystemPrompt(level: string): string {
@@ -40,8 +50,9 @@ ${rubricBlock}다듬기 원칙:
 - 문장의 모양(한 문장인 것, 어순, 종결어미)은 그대로 두세요. 문장을 쪼개지 마세요. 이 레벨 독자가 막힐 곳만 최소한으로 고치세요.
 - 고칠 곳: (1) 이 레벨에도 어려운 낱말·전문어를 쉬운 말로 바꾸기, (2) 같은 뜻을 겹쳐 꾸미는 말 중 가장 무거운 한 겹 덜기, (3) 레벨 기준을 크게 넘는 얽힌 문장은 가장 무거운 부분만 손보기.
 - 이 레벨 독자가 이미 읽을 수 있는 문장은 건드리지 마세요. ${MAX_SENTENCE_CHARS}자 이하의 문장은 길다는 이유만으로 고치지 마세요.
-- ${MAX_SENTENCE_CHARS}자를 넘는 문장은 그 레벨 독자에게 너무 얽혀 있으므로, 문장을 하나로 유지한 채 가장 무거운 꾸밈 한 겹이나 한 덩어리를 덜어 읽기 쉽게 하세요(뜻이 되는 부분은 남기세요).
-- 비유, 어조, 분위기, 정서를 만드는 표현을 장식이라는 이유로 지우지 마세요. 정서를 만드는 감각어와 은유는 그대로 두고, 뜻이 약해지는 낱말로도 바꾸지 마세요.
+- ${MAX_SENTENCE_CHARS}자를 넘는 문장은 그 레벨 독자에게 너무 얽혀 있으므로, 문장을 하나로 유지한 채 아래 [덜어내는 순서]대로 덜어 읽기 쉽게 하세요(뜻이 되는 부분은 남기세요).
+- 비유, 어조, 분위기, 정서를 만드는 표현을 장식이라는 이유로 지우지 마세요. 정서를 만드는 감각어와 은유는 되도록 그대로 두고, 뜻이 약해지는 낱말로도 바꾸지 마세요.
+- 인물을 드러내는 행동 묘사(예: 허리를 곧게 펴는 것, 물건을 반듯하게 맞추는 것)는 지우지 마세요. 덜어낼 것은 그 행동을 다시 설명하는 말뿐입니다.
 - 의미, 줄거리, 인물, 시점은 바꾸지 마세요. 새 내용을 더하지 마세요.
 - 수·나이·날짜 표현은 그대로 두세요. 아라비아 숫자뿐 아니라 '열네 살', '이틀 뒤'처럼 말로 쓴 것도 바꾸지 마세요.
 - 대사(따옴표 안)는 건드리지 마세요. 따옴표(“ ” " ' ‘ ’ 「 」)가 들어간 구절은 before와 after에 쓰지 마세요.
@@ -50,8 +61,35 @@ ${rubricBlock}다듬기 원칙:
 - 고칠 곳이 없으면 changes를 빈 배열로 돌려주세요. 장당 최대 ${MAX_CHAPTER_POLISH_CHANGES}건입니다.
 ${KEEP_STYLE}
 ${DATA_NOTICE}
-${JSON_ONLY}`;
+${JSON_ONLY}
+
+${REMOVAL_ORDER}
+
+${POLISH_EXAMPLES}`;
 }
+
+// 덜어낼 때 모델이 "가장 무거운 한 겹"을 스스로 고르게 두면 감각어나 비유부터 지우는 쪽으로 기운다. 순서를 정해 주면 위의 금지 규칙과 부딪치지 않는다.
+const REMOVAL_ORDER = `[덜어내는 순서]
+무게를 덜어야 하는 문장에서는 아래 순서로 앞의 것부터 덜어내세요. 앞 단계만으로 충분하면 뒤 단계는 건드리지 마세요.
+1. 정도·강조 부사: 완전히, 지극히, 기형적으로, 무자비하게
+2. 한 명사에 겹친 같은 방향의 꾸밈 중 하나: 길고 짙은 그림자 → 짙은 그림자
+3. 행동으로 이미 드러난 것을 다시 설명하는 말: 단정한 손놀림으로
+4. 줄거리 정보가 없는 꾸미는 절: 칠이 벗겨진 이층 우편함의 → 이층 우편함의
+5. 비유와 감각어는 맨 마지막이고, 1~4로 안 되는 문장에서만 건드립니다. 그때도 그 장면의 분위기를 만드는 핵심 감각어 하나는 남기세요.`;
+
+const POLISH_EXAMPLES = `[예시]
+before: 길고 짙은 그림자
+after: 짙은 그림자
+reason: 같은 방향의 꾸밈이 겹쳤다.
+
+before: 먼지를 단정한 손놀림으로 털어냈다
+after: 먼지를 털어냈다
+reason: 앞의 행동이 이미 단정함을 보여 준다.
+
+[잘못된 예시: 하지 말 것]
+before: 허리를 곧게 펴고 코트 자락에 묻은 먼지를
+after: 코트의 먼지를
+reason: (잘못됨) 인물의 성격을 보여 주는 행동(허리를 곧게 펴고)을 지웠다.`;
 
 export function buildChapterPolishTask(input: { chapterNumber: number; instruction?: string; targets?: LongSentence[] }): string {
   const instruction = input.instruction?.trim();
@@ -59,7 +97,7 @@ export function buildChapterPolishTask(input: { chapterNumber: number; instructi
     ? `
 
 [반드시 손볼 문장]
-아래 문장은 ${MAX_SENTENCE_CHARS}자를 넘어 이 레벨 독자에게 너무 얽혀 있습니다. 각 문장마다 문장은 하나로 유지한 채 가장 무거운 꾸밈 한 겹이나 한 덩어리를 덜어 changes에 넣으세요(뜻이 되는 부분은 남기세요).
+아래 문장은 ${MAX_SENTENCE_CHARS}자를 넘어 이 레벨 독자에게 너무 얽혀 있습니다. 각 문장마다 문장은 하나로 유지한 채 덜어내는 순서대로 앞 단계부터 덜어 changes에 넣으세요(뜻이 되는 부분은 남기세요).
 ${input.targets.map((t) => `- ${t.paragraphNumber}문단: ${t.sentence}`).join("\n")}`
     : "";
   return `[요청]
@@ -74,17 +112,63 @@ export type ChapterPolishResult = { changes: ChapterPolishChange[]; received: nu
 
 const QUOTE_CHARS = /[“”"'‘’「」]/;
 
-// 사실(나이·날짜)은 ④의 일이다. 아라비아 숫자 덩어리가 after에 그대로 남아야 한다(한글 수사는 못 잡는다 — 프롬프트로만 막는다).
+// 말로 쓴 수("삼 년", "열네 살", "대여섯 명", "이틀", "수천 번")를 찾는다. 수 낱말 + 단위 낱말, 또는 그 자체로 수인 낱말이다.
+// 수가 아닌 것도 잡는다("등을 곧게 한 채"의 "한 채"). 이 검사는 그런 구절을 고치는 항목을 버리는 쪽으로만 틀리므로 숫자가 바뀌는 사고는 나지 않는다.
+const longestFirst = (words: string[]) => [...words].sort((a, b) => b.length - a.length).join("|");
+const COUNTERS = longestFirst([
+  "개월", "주일", "시간", "센티미터", "킬로미터", "킬로그램", "퍼센트", "번째", "리터", "미터", "센티", "킬로", "그램", "켤레", "군데", "걸음",
+  "방울", "송이", "가지", "페이지", "사람", "마리", "줄기", "년", "해", "달", "주", "일", "날", "시", "분", "초", "살", "세", "층", "번", "명",
+  "개", "대", "권", "장", "잔", "병", "채", "줄", "곳", "째", "원", "호", "동", "칸", "쪽", "평", "겹",
+]);
+const NATIVE_NUMERALS = longestFirst([
+  "열", "스물", "스무", "서른", "마흔", "쉰", "예순", "일흔", "여든", "아흔", "하나", "한", "둘", "두", "셋", "세", "석", "넷", "네", "넉", "다섯", "여섯", "일곱", "여덟", "아홉",
+]);
+const SPOKEN_NUMBER = new RegExp(
+  [
+    `(?:대여섯|예닐곱|두세|서너|서넛|네댓|너덧|두어|여남은|이틀|사흘|나흘|닷새|엿새|이레|여드레|아흐레|열흘|하루|보름)(?:\\s?(?:${COUNTERS}))?`,
+    `수(?:십|백|천|만|억)(?:\\s?(?:${COUNTERS}))?`,
+    `(?:${NATIVE_NUMERALS})+\\s?(?:${COUNTERS})`,
+    // 띄어 쓴 "이"(이 장면, 이 원고)는 수가 아니라 지시어다. 띄어 쓰지 않은 "이층"이나 "십이 년"의 "이"는 수다.
+    `(?!이\\s)[일이삼사오육칠팔구십백천만억영]+\\s?(?:${COUNTERS})`,
+  ].join("|"),
+  "g",
+);
+
+export function spokenNumbers(text: string): string[] {
+  return text.match(SPOKEN_NUMBER) ?? [];
+}
+
+const squash = (s: string) => s.replace(/\s+/g, "");
+
+// 사실(나이·날짜)은 ④의 일이다. 아라비아 숫자 덩어리와 말로 쓴 수가 after에 그대로 남아야 한다(띄어쓰기만 달라진 것은 남은 것으로 본다).
 function keepsNumbers(before: string, after: string): boolean {
-  return (before.match(/\d+/g) ?? []).every((n) => after.includes(n));
+  const flat = squash(after);
+  return (before.match(/\d+/g) ?? []).every((n) => after.includes(n)) && spokenNumbers(before).every((n) => flat.includes(squash(n)));
+}
+
+/** 이 변경이 대상 문장(문단 안 위치)과 겹치는가. 정확히 한 번 나오는 before라서 위치는 하나다. */
+function touchesTarget(paragraphs: string[], paragraphIndex: number, before: string, targets: LongSentence[]): boolean {
+  const paragraph = paragraphs[paragraphIndex];
+  const start = paragraph.indexOf(before);
+  const end = start + before.length;
+  return targets.some((t) => {
+    if (t.paragraphNumber - 1 !== paragraphIndex) return false;
+    const s = paragraph.indexOf(t.sentence);
+    return s >= 0 && start < s + t.sentence.length && s < end;
+  });
 }
 
 /**
- * 장 단위 다듬기 결과 검증. 항목마다 가드(따옴표 글자, 대사 안쪽, 숫자 보존, 길이 120% 이하(또는 +8자 이하), 존재하는 문단)를 먼저 걸고,
- * 문단별로 묶어 기존 validateChanges(정확히 한 번·겹침·빈 줄·문단당 8건)로 마무리한 뒤, 합쳐서 앞에서부터 장당 10건에서 자른다.
+ * 장 단위 다듬기 결과 검증. 항목마다 가드(따옴표 글자, 대사 안쪽, 숫자·말로 쓴 수 보존, 길이 120% 이하(또는 +8자 이하), 존재하는 문단)를 먼저 걸고,
+ * 문단별로 묶어 기존 validateChanges(정확히 한 번·겹침·빈 줄·문단당 8건)로 마무리한 뒤, 합쳐서 장당 10건에서 자른다.
+ * 자를 때는 [반드시 손볼 문장](targets)을 건드리는 항목을 먼저 남기고 나머지는 앞에서부터 채우며, 남은 것은 원고 순서로 돌려준다.
  * 따옴표 짝이 어긋난 문단은 안쪽·바깥을 알 수 없어 그 문단의 항목을 전부 버린다. received는 받은 항목 수다.
  */
-export function validateChapterPolish(raw: RawChapterPolishChange[], paragraphs: string[]): ChapterPolishResult {
+export function validateChapterPolish(
+  raw: RawChapterPolishChange[],
+  paragraphs: string[],
+  targets: LongSentence[] = [],
+): ChapterPolishResult {
   const ranges = paragraphs.map((p) => quotedRanges(p));
   const byParagraph = new Map<number, PolishChange[]>();
 
@@ -111,7 +195,11 @@ export function validateChapterPolish(raw: RawChapterPolishChange[], paragraphs:
   for (const [paragraphIndex, list] of byParagraph) {
     for (const c of validateChanges(list, paragraphs[paragraphIndex])) changes.push({ paragraphIndex, ...c });
   }
-  return { changes: changes.slice(0, MAX_CHAPTER_POLISH_CHANGES), received: raw.length };
+  if (changes.length <= MAX_CHAPTER_POLISH_CHANGES) return { changes, received: raw.length };
+  const priority = changes.filter((c) => touchesTarget(paragraphs, c.paragraphIndex, c.before, targets));
+  const rest = changes.filter((c) => !priority.includes(c));
+  const kept = new Set([...priority, ...rest].slice(0, MAX_CHAPTER_POLISH_CHANGES));
+  return { changes: changes.filter((c) => kept.has(c)), received: raw.length };
 }
 
 // 검증을 통과한 항목을 문단별로 적용한다. 입력 배열은 바꾸지 않는다.
